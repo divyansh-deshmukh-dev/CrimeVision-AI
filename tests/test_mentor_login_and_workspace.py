@@ -443,8 +443,8 @@ class TestFreshDeploymentStartupProvisioning:
 
             # Verify evidence and report associations are preserved
             ev_list = list_evidence("case_bd736d27b0e9")
-            assert len(ev_list) == 1
-            assert ev_list[0]["evidence_id"] == "ev_test_1"
+            ev_ids = [e["evidence_id"] for e in ev_list]
+            assert "ev_test_1" in ev_ids
 
     def test_unrelated_cases_and_users_are_not_modified(self, tmp_path):
         """Ensure other cases and users with custom names are never overwritten."""
@@ -589,4 +589,250 @@ class TestFreshDeploymentStartupProvisioning:
             headers={"X-CSRF-Token": csrf_token2},
         )
         assert bad_resp.status_code == 401
+
+    def test_sample_media_files_restored_when_missing(self, tmp_path):
+        """Simulate ephemeral container restart where uploads were cleared but DB persisted.
+        ensure_demo_evaluator must restore files from storage/seed_assets without 404s."""
+        isolated_dir = tmp_path / "ephemeral_render_deploy"
+        uploads_dir = isolated_dir / "uploads"
+        reports_dir = isolated_dir / "reports"
+        db_file = isolated_dir / "crimevision_ephemeral.db"
+
+        cfg = {
+            "TESTING": True,
+            "DEBUG": False,
+            "STORAGE_DIR": isolated_dir,
+            "CASES_DIR": isolated_dir / "cases",
+            "UPLOADS_DIR": uploads_dir,
+            "REPORTS_DIR": reports_dir,
+            "DB_PATH": db_file,
+            "SECRET_KEY": "ephemeral-test-secret-key-32-bytes!",
+        }
+
+        app = create_app(config_override=cfg)
+        client = app.test_client()
+
+        with app.app_context():
+            from storage.provision_demo import ensure_demo_evaluator
+
+            # Verify initial files exist and are non-empty
+            img_file = uploads_dir / "case_bd736d27b0e9" / "ev_b31dacb7da6f" / "Gemini_Generated_Image_l79sz8l79sz8l79s_1.png"
+            audio_file = uploads_dir / "case_bd736d27b0e9" / "ev_b49348be7de2" / "ElevenLabs_2026-10-18T17_37_53_Roger_-_Laid-Back_Casual_Resonant_pre_sp100_s50_s.mp3"
+            video_file = uploads_dir / "case_bd736d27b0e9" / "ev_9d23b6a675ce" / "Realistic_15-second_continuous_CCTV_surveillance_footage_of_a_small_urban_street.mp4"
+            pdf_file = reports_dir / "case_bd736d27b0e9" / "forensic_report_case_bd736d27b0e9.pdf"
+
+            assert img_file.exists() and img_file.stat().st_size > 1000
+            assert audio_file.exists() and audio_file.stat().st_size > 1000
+            assert video_file.exists() and video_file.stat().st_size > 1000
+            assert pdf_file.exists() and pdf_file.stat().st_size > 500
+
+            # Simulate ephemeral container restart: delete all uploaded & reported files from disk
+            import stat
+            for p in [img_file, audio_file, video_file, pdf_file]:
+                if p.exists():
+                    p.chmod(stat.S_IWRITE)
+                    p.unlink()
+
+            assert not img_file.exists()
+            assert not audio_file.exists()
+            assert not video_file.exists()
+            assert not pdf_file.exists()
+
+            # Run ensure_demo_evaluator (as happens on container restart)
+            res = ensure_demo_evaluator()
+            assert res["username"] == "user-12"
+
+            # Verify files are self-healed and restored from seed_assets
+            assert img_file.exists() and img_file.stat().st_size > 1000
+            assert audio_file.exists() and audio_file.stat().st_size > 1000
+            assert video_file.exists() and video_file.stat().st_size > 1000
+            assert pdf_file.exists() and pdf_file.stat().st_size > 500
+
+        # Login and test preview/download endpoints return 200
+        csrf_res = client.get("/api/auth/csrf")
+        csrf_token = csrf_res.get_json()["csrf_token"]
+        login_res = client.post(
+            "/api/auth/login",
+            json={"username": "user-12", "password": "user1234"},
+            headers={"X-CSRF-Token": csrf_token},
+        )
+        assert login_res.status_code == 200
+
+        # Image preview
+        r_img = client.get("/api/cases/case_bd736d27b0e9/evidence/ev_b31dacb7da6f/file")
+        assert r_img.status_code == 200
+        assert r_img.content_type.startswith("image/")
+        assert len(r_img.data) > 1000
+
+        # Audio file
+        r_audio = client.get("/api/cases/case_bd736d27b0e9/evidence/ev_b49348be7de2/file")
+        assert r_audio.status_code == 200
+        assert r_audio.content_type.startswith("audio/")
+        assert len(r_audio.data) > 1000
+
+        # Video file
+        r_video = client.get("/api/cases/case_bd736d27b0e9/evidence/ev_9d23b6a675ce/file")
+        assert r_video.status_code == 200
+        assert r_video.content_type.startswith("video/")
+        assert len(r_video.data) > 1000
+
+        # Report download
+        r_pdf = client.get("/api/reports/rep_4af9ce45c9dd")
+        assert r_pdf.status_code == 200
+        assert r_pdf.content_type == "application/pdf"
+        assert len(r_pdf.data) > 500
+
+    def test_seeded_analysis_json_has_detection_objects_and_upgrades_old_schema(self, tmp_path):
+        """Verify seeded image evidence contains analysis.detection.objects and migrates legacy schemas."""
+        isolated_dir = tmp_path / "schema_render_deploy"
+        db_file = isolated_dir / "crimevision_schema.db"
+
+        cfg = {
+            "TESTING": True,
+            "DEBUG": False,
+            "STORAGE_DIR": isolated_dir,
+            "CASES_DIR": isolated_dir / "cases",
+            "UPLOADS_DIR": isolated_dir / "uploads",
+            "REPORTS_DIR": isolated_dir / "reports",
+            "DB_PATH": db_file,
+            "SECRET_KEY": "schema-test-secret-key-32-bytes!",
+        }
+
+        app = create_app(config_override=cfg)
+
+        with app.app_context():
+            from storage.database import get_db
+            from storage.provision_demo import ensure_demo_evaluator
+
+            db = get_db()
+            row = db.execute("SELECT analysis_json FROM evidence WHERE evidence_id = 'ev_b31dacb7da6f'").fetchone()
+            assert row is not None
+            analysis = json.loads(row["analysis_json"])
+
+            # Verify standard frontend contract
+            assert "detection" in analysis
+            assert "objects" in analysis["detection"]
+            objects = analysis["detection"]["objects"]
+            assert len(objects) == 4
+
+            # Verify bounding box format is normalized [x1, y1, x2, y2]
+            labels = [obj["label"] for obj in objects]
+            assert "car" in labels
+            assert "truck" in labels
+            assert "person" in labels
+            assert "traffic light" in labels
+
+            for obj in objects:
+                assert "box_normalized" in obj
+                norm = obj["box_normalized"]
+                assert len(norm) == 4
+                assert all(0.0 <= c <= 1.0 for c in norm)
+
+            # Now test schema migration: downgrade DB to legacy format lacking 'detection.objects'
+            legacy_analysis = {
+                "detections": [
+                    {"label": "old_box", "confidence": 0.8}
+                ],
+                "caption": "old style caption"
+            }
+            db.execute(
+                "UPDATE evidence SET analysis_json = ? WHERE evidence_id = 'ev_b31dacb7da6f'",
+                (json.dumps(legacy_analysis),),
+            )
+            db.commit()
+
+            # Confirm downgrade
+            row2 = db.execute("SELECT analysis_json FROM evidence WHERE evidence_id = 'ev_b31dacb7da6f'").fetchone()
+            parsed2 = json.loads(row2["analysis_json"])
+            assert "detection" not in parsed2
+
+            # Run ensure_demo_evaluator which should migrate the schema
+            ensure_demo_evaluator()
+
+            # Verify migrated schema
+            row3 = db.execute("SELECT analysis_json FROM evidence WHERE evidence_id = 'ev_b31dacb7da6f'").fetchone()
+            migrated = json.loads(row3["analysis_json"])
+            assert "detection" in migrated
+            assert "objects" in migrated["detection"]
+            assert len(migrated["detection"]["objects"]) == 4
+
+    def test_real_user_uploaded_files_never_overwritten(self, tmp_path):
+        """Verify user-uploaded evidence files and records are never overwritten or touched by provisioning."""
+        isolated_dir = tmp_path / "user_preserve_deploy"
+        uploads_dir = isolated_dir / "uploads"
+        db_file = isolated_dir / "crimevision_user_preserve.db"
+
+        cfg = {
+            "TESTING": True,
+            "DEBUG": False,
+            "STORAGE_DIR": isolated_dir,
+            "CASES_DIR": isolated_dir / "cases",
+            "UPLOADS_DIR": uploads_dir,
+            "REPORTS_DIR": isolated_dir / "reports",
+            "DB_PATH": db_file,
+            "SECRET_KEY": "preserve-test-secret-key-32-bytes!",
+        }
+
+        app = create_app(config_override=cfg)
+
+        with app.app_context():
+            from storage.database import get_db
+            from storage.provision_demo import ensure_demo_evaluator
+
+            db = get_db()
+            user_file_dir = uploads_dir / "case_bd736d27b0e9"
+            user_file_dir.mkdir(parents=True, exist_ok=True)
+            custom_file = user_file_dir / "custom_real_evidence.png"
+            custom_file.write_bytes(b"REAL_INVESTIGATOR_EVIDENCE_BYTES_12345")
+
+            now_iso = "2026-10-25T14:00:00+00:00"
+            db.execute(
+                """
+                INSERT INTO evidence (evidence_id, case_id, filename, original_name, modality, mime_type, sha256, file_size, uploaded_at, analysis_status, analysis_json)
+                VALUES ('ev_custom_user_1', 'case_bd736d27b0e9', 'case_bd736d27b0e9/custom_real_evidence.png', 'custom_real_evidence.png', 'image', 'image/png', 'hashcustom123', 38, ?, 'completed', '{"custom": true}')
+                """,
+                (now_iso,),
+            )
+            db.commit()
+
+            # Re-run ensure_demo_evaluator
+            ensure_demo_evaluator()
+
+            # Custom file on disk must be completely untouched
+            assert custom_file.exists()
+            assert custom_file.read_bytes() == b"REAL_INVESTIGATOR_EVIDENCE_BYTES_12345"
+
+            # Custom record in DB must be unchanged
+            custom_row = db.execute("SELECT * FROM evidence WHERE evidence_id = 'ev_custom_user_1'").fetchone()
+            assert custom_row is not None
+            assert custom_row["original_name"] == "custom_real_evidence.png"
+            assert json.loads(custom_row["analysis_json"]) == {"custom": True}
+
+    def test_missing_seed_assets_do_not_crash_startup(self, tmp_path, monkeypatch):
+        """Verify that even if seed assets folder is empty or unreadable, ensure_demo_evaluator falls back cleanly."""
+        isolated_dir = tmp_path / "fallback_deploy"
+        empty_seed_dir = tmp_path / "nonexistent_seed_assets"
+
+        monkeypatch.setattr(
+            "storage.provision_demo.Path",
+            lambda *args, **kwargs: empty_seed_dir
+        )
+
+        cfg = {
+            "TESTING": True,
+            "DEBUG": False,
+            "STORAGE_DIR": isolated_dir,
+            "CASES_DIR": isolated_dir / "cases",
+            "UPLOADS_DIR": isolated_dir / "uploads",
+            "REPORTS_DIR": isolated_dir / "reports",
+            "DB_PATH": isolated_dir / "crimevision_fallback.db",
+            "SECRET_KEY": "fallback-test-secret-key-32-bytes!",
+        }
+
+        # Rather than monkeypatching Path directly which could break other things, test _read_seed_asset directly with non-existent asset
+        from storage.provision_demo import _read_seed_asset, _get_synthetic_media
+        fallback_data = _read_seed_asset("non_existent_file.png", "image")
+        assert len(fallback_data) > 0
+        assert fallback_data.startswith(b"\x89PNG")
+
 

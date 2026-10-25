@@ -28,6 +28,8 @@ storage/reports/
 storage/backups/
 storage/scratch/
 storage_test/
+!storage/seed_assets/
+!storage/seed_assets/**
 *.db
 *.db-wal
 *.db-shm
