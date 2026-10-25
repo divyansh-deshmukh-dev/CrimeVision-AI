@@ -302,6 +302,9 @@ def ensure_demo_evaluator(
     username: Optional[str] = None,
     password: Optional[str] = None,
     email: Optional[str] = None,
+    display_name: Optional[str] = None,
+    case_name: Optional[str] = None,
+    case_description: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Ensure the evaluator/demo account and initial writable workspace are provisioned idempotently.
 
@@ -309,9 +312,12 @@ def ensure_demo_evaluator(
     Guarantees:
       1. Evaluator account exists with role='user' (normal, unrestricted workspace access).
       2. Secure scrypt password hashing (never plaintext).
-      3. An initial writable investigation case exists for the user with realistic evidence items,
-         so the evaluator immediately sees an active workspace upon first login on fresh deployments (e.g. Render).
-      4. Safe for concurrency and repeated execution without duplicating data or breaking on existing records.
+      3. An initial writable investigation case exists named 'test case' (case_bd736d27b0e9) with realistic evidence items,
+         so the evaluator immediately sees an active workspace upon first login matching the local application.
+      4. For an existing database, renames the case only if its ID is 'case_bd736d27b0e9' and its current name is exactly
+         'Metro CCTV & Evidence Investigation', preserving all evidence and report associations.
+      5. Updates the display name to 'user' only when the account matches the evaluator and its existing display name is 'Lead Investigator'.
+      6. Safe for concurrency and repeated execution without duplicating data or breaking on existing records.
     """
     from services.storage_service import get_storage_provider
     from storage.users_store import authenticate_user, ensure_user, get_user_by_username
@@ -320,6 +326,13 @@ def ensure_demo_evaluator(
     eval_username = (username or os.getenv("DEMO_USERNAME") or "user-12").strip().lower()
     eval_password = password or os.getenv("DEMO_PASSWORD") or "user1234"
     eval_email = (email or os.getenv("DEMO_EMAIL") or "user@gmail.com").strip().lower()
+    eval_display_name = (display_name or os.getenv("DEMO_DISPLAY_NAME") or "user").strip()
+    eval_case_name = (case_name or os.getenv("DEMO_CASE_NAME") or "test case").strip()
+    eval_case_desc = (
+        case_description
+        if case_description is not None
+        else os.getenv("DEMO_CASE_DESCRIPTION", "")
+    ).strip()
 
     db = get_db()
     now_iso = "2026-10-25T12:00:00+00:00"
@@ -332,7 +345,7 @@ def ensure_demo_evaluator(
                 username=eval_username,
                 email=eval_email,
                 password=eval_password,
-                display_name="Lead Investigator",
+                display_name=eval_display_name,
                 role="user",
                 user_id="usr_1fb3fd9494ca",
             )
@@ -346,6 +359,14 @@ def ensure_demo_evaluator(
                 raise
     else:
         user_id = existing["user_id"]
+        # Update display name only when evaluator matches and existing display name is 'Lead Investigator'
+        if existing.get("display_name") == "Lead Investigator":
+            db.execute(
+                "UPDATE users SET display_name = ? WHERE user_id = ?",
+                (eval_display_name, user_id),
+            )
+            db.commit()
+
         # If user exists but authenticate_user fails with eval_password, update hash
         # (e.g. if DEMO_PASSWORD was configured or changed via environment variable)
         if authenticate_user(eval_username, eval_password) is None:
@@ -358,7 +379,7 @@ def ensure_demo_evaluator(
 
     # 2. Check if this user already has any active cases
     user_cases = db.execute(
-        "SELECT case_id FROM cases WHERE user_id = ?",
+        "SELECT case_id, name FROM cases WHERE user_id = ?",
         (user_id,),
     ).fetchall()
 
@@ -377,15 +398,31 @@ def ensure_demo_evaluator(
             (
                 case_id,
                 user_id,
-                "Metro CCTV & Evidence Investigation",
-                "Primary forensic investigation case with multimodal surveillance footage, intercepts, and image captures.",
+                eval_case_name,
+                eval_case_desc,
                 now_iso,
                 now_iso,
             ),
         )
         db.commit()
     else:
-        case_id = user_cases[0]["case_id"]
+        # Existing database migration:
+        # Rename the case only if its ID is 'case_bd736d27b0e9' and current name is exactly 'Metro CCTV & Evidence Investigation'
+        db.execute(
+            """
+            UPDATE cases
+            SET name = ?, description = ?, updated_at = ?
+            WHERE case_id = 'case_bd736d27b0e9'
+              AND user_id = ?
+              AND name = 'Metro CCTV & Evidence Investigation'
+            """,
+            (eval_case_name, eval_case_desc, now_iso, user_id),
+        )
+        db.commit()
+
+        owned_case_ids = [c["case_id"] for c in user_cases]
+        if case_id not in owned_case_ids:
+            case_id = user_cases[0]["case_id"]
 
     storage = get_storage_provider()
 

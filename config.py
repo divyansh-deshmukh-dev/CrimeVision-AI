@@ -87,6 +87,9 @@ class Config:
     DEMO_USERNAME: str = os.getenv("DEMO_USERNAME", "user-12").strip().lower()
     DEMO_PASSWORD: str = os.getenv("DEMO_PASSWORD", "user1234")
     DEMO_EMAIL: str = os.getenv("DEMO_EMAIL", "user@gmail.com").strip().lower()
+    DEMO_DISPLAY_NAME: str = os.getenv("DEMO_DISPLAY_NAME", "user").strip()
+    DEMO_CASE_NAME: str = os.getenv("DEMO_CASE_NAME", "test case").strip()
+    DEMO_CASE_DESCRIPTION: str = os.getenv("DEMO_CASE_DESCRIPTION", "").strip()
 
     # ── Storage paths (uses /tmp on serverless Vercel) ─────────────────────────
     if os.getenv("VERCEL"):

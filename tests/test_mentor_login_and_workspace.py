@@ -342,14 +342,17 @@ class TestFreshDeploymentStartupProvisioning:
         data = login_resp.get_json()
         assert data["status"] == "authenticated"
         assert data["user"]["username"] == "user-12"
+        assert data["user"]["display_name"] == "user"
         assert data["user"]["role"] == "user"
 
-        # 3. Check cases for user-12 — should have the provisioned active workspace case
+        # 3. Check cases for user-12 — should have the provisioned active workspace case named 'test case'
         cases_resp = client.get("/api/cases", headers={"X-CSRF-Token": csrf_token})
         assert cases_resp.status_code == 200
         cases = cases_resp.get_json()["cases"]
         assert len(cases) >= 1
         case_id = cases[0]["case_id"]
+        assert case_id == "case_bd736d27b0e9"
+        assert cases[0]["name"] == "test case"
 
         # 4. Check evidence in this case — preloaded multimodal evidence items exist
         ev_resp = client.get(f"/api/cases/{case_id}/evidence", headers={"X-CSRF-Token": csrf_token})
@@ -359,6 +362,183 @@ class TestFreshDeploymentStartupProvisioning:
         assert "image" in modalities
         assert "audio" in modalities
         assert "video" in modalities
+
+    def test_existing_render_database_migration_to_test_case(self, tmp_path):
+        """Verify migration of an existing Render database seeded with 'Metro CCTV & Evidence Investigation'.
+
+        Renames the case only if case_id='case_bd736d27b0e9' and name='Metro CCTV & Evidence Investigation'.
+        Updates display_name only if user-12 has display_name='Lead Investigator'.
+        Preserves all evidence, reports, and IDs.
+        """
+        import sqlite3
+        isolated_dir = tmp_path / "migration_render_deploy"
+        db_file = isolated_dir / "crimevision_mig.db"
+        isolated_dir.mkdir(parents=True, exist_ok=True)
+
+        cfg = {
+            "TESTING": True,
+            "DEBUG": False,
+            "STORAGE_DIR": isolated_dir,
+            "CASES_DIR": isolated_dir / "cases",
+            "UPLOADS_DIR": isolated_dir / "uploads",
+            "REPORTS_DIR": isolated_dir / "reports",
+            "DB_PATH": db_file,
+            "SECRET_KEY": "migration-test-secret-key-32-bytes!",
+        }
+
+        # Initialize schema and pre-populate with old Render seeded values
+        from storage.database import init_db
+        init_db(db_file)
+
+        conn = sqlite3.connect(str(db_file))
+        now = "2026-10-25T12:00:00+00:00"
+        conn.execute(
+            """
+            INSERT INTO users (user_id, display_name, username, email, password_hash, role, created_at, is_active, is_demo)
+            VALUES ('usr_1fb3fd9494ca', 'Lead Investigator', 'user-12', 'user@gmail.com', 'dummy_hash', 'user', ?, 1, 0)
+            """,
+            (now,),
+        )
+        conn.execute(
+            """
+            INSERT INTO cases (case_id, user_id, name, description, created_at, updated_at, status, is_demo, demo_type)
+            VALUES ('case_bd736d27b0e9', 'usr_1fb3fd9494ca', 'Metro CCTV & Evidence Investigation', 'Old Desc', ?, ?, 'active', 0, NULL)
+            """,
+            (now, now),
+        )
+        conn.execute(
+            """
+            INSERT INTO evidence (evidence_id, case_id, filename, original_name, modality, mime_type, sha256, file_size, uploaded_at, analysis_status)
+            VALUES ('ev_test_1', 'case_bd736d27b0e9', 'sample.png', 'sample.png', 'image', 'image/png', 'hash123', 100, ?, 'completed')
+            """,
+            (now,),
+        )
+        conn.execute(
+            """
+            INSERT INTO reports (report_id, case_id, filename, created_at, file_size)
+            VALUES ('rep_test_1', 'case_bd736d27b0e9', 'report.pdf', ?, 200)
+            """,
+            (now,),
+        )
+        conn.commit()
+        conn.close()
+
+        # Boot application with startup hook
+        app = create_app(config_override=cfg)
+        with app.app_context():
+            from storage.users_store import get_user_by_username
+            from storage.cases_store import get_case
+            from storage.evidence_store import list_evidence
+
+            # Check user display name was migrated from 'Lead Investigator' to 'user'
+            u = get_user_by_username("user-12")
+            assert u is not None
+            assert u["display_name"] == "user"
+
+            # Check case was migrated from 'Metro CCTV & Evidence Investigation' to 'test case'
+            c = get_case("case_bd736d27b0e9")
+            assert c is not None
+            assert c["name"] == "test case"
+            assert c["case_id"] == "case_bd736d27b0e9"
+
+            # Verify evidence and report associations are preserved
+            ev_list = list_evidence("case_bd736d27b0e9")
+            assert len(ev_list) == 1
+            assert ev_list[0]["evidence_id"] == "ev_test_1"
+
+    def test_unrelated_cases_and_users_are_not_modified(self, tmp_path):
+        """Ensure other cases and users with custom names are never overwritten."""
+        import sqlite3
+        isolated_dir = tmp_path / "unrelated_render_deploy"
+        db_file = isolated_dir / "crimevision_unrelated.db"
+        isolated_dir.mkdir(parents=True, exist_ok=True)
+
+        cfg = {
+            "TESTING": True,
+            "DEBUG": False,
+            "STORAGE_DIR": isolated_dir,
+            "CASES_DIR": isolated_dir / "cases",
+            "UPLOADS_DIR": isolated_dir / "uploads",
+            "REPORTS_DIR": isolated_dir / "reports",
+            "DB_PATH": db_file,
+            "SECRET_KEY": "unrelated-test-secret-key-32-bytes!",
+        }
+
+        from storage.database import init_db
+        init_db(db_file)
+
+        conn = sqlite3.connect(str(db_file))
+        now = "2026-10-25T12:00:00+00:00"
+        # Another user with different display name
+        conn.execute(
+            """
+            INSERT INTO users (user_id, display_name, username, email, password_hash, role, created_at, is_active, is_demo)
+            VALUES ('usr_other_999', 'Detective Miller', 'miller-01', 'miller@gmail.com', 'dummy_hash', 'user', ?, 1, 0)
+            """,
+            (now,),
+        )
+        # Another case with different ID and name
+        conn.execute(
+            """
+            INSERT INTO cases (case_id, user_id, name, description, created_at, updated_at, status, is_demo, demo_type)
+            VALUES ('case_custom_888', 'usr_other_999', 'Downtown Burglary Investigation', 'Desc', ?, ?, 'active', 0, NULL)
+            """,
+            (now, now),
+        )
+        conn.commit()
+        conn.close()
+
+        # Run application startup
+        app = create_app(config_override=cfg)
+        with app.app_context():
+            from storage.users_store import get_user_by_username
+            from storage.cases_store import get_case
+
+            # Unrelated user remains untouched
+            other_u = get_user_by_username("miller-01")
+            assert other_u["display_name"] == "Detective Miller"
+
+            # Unrelated case remains untouched
+            other_c = get_case("case_custom_888")
+            assert other_c["name"] == "Downtown Burglary Investigation"
+
+    def test_idempotent_repeated_startup(self, tmp_path):
+        """Verify ensure_demo_evaluator runs multiple times without duplicating or corrupting data."""
+        isolated_dir = tmp_path / "repeated_render_deploy"
+        db_file = isolated_dir / "crimevision_rep.db"
+        isolated_dir.mkdir(parents=True, exist_ok=True)
+
+        cfg = {
+            "TESTING": True,
+            "DEBUG": False,
+            "STORAGE_DIR": isolated_dir,
+            "CASES_DIR": isolated_dir / "cases",
+            "UPLOADS_DIR": isolated_dir / "uploads",
+            "REPORTS_DIR": isolated_dir / "reports",
+            "DB_PATH": db_file,
+            "SECRET_KEY": "repeated-test-secret-key-32-bytes!",
+        }
+
+        app = create_app(config_override=cfg)
+        with app.app_context():
+            from storage.provision_demo import ensure_demo_evaluator
+            from storage.database import get_db
+
+            # Call 3 times consecutively
+            res1 = ensure_demo_evaluator()
+            res2 = ensure_demo_evaluator()
+            res3 = ensure_demo_evaluator()
+
+            assert res1["username"] == "user-12"
+            assert res2["username"] == "user-12"
+            assert res3["username"] == "user-12"
+
+            db = get_db()
+            user_count = db.execute("SELECT COUNT(*) as c FROM users WHERE username = 'user-12'").fetchone()["c"]
+            assert user_count == 1, "user-12 must not be duplicated"
+
+            case_count = db.execute("SELECT COUNT(*) as c FROM cases WHERE user_id = 'usr_1fb3fd9494ca'").fetchone()["c"]
+            assert case_count == 1, "Primary case must not be duplicated"
 
     def test_custom_evaluator_credentials_via_env_vars(self, tmp_path, monkeypatch):
         """Simulate Render deployment with custom DEMO_USERNAME and DEMO_PASSWORD env vars."""
