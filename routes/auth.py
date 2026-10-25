@@ -34,7 +34,15 @@ def login_page():
     if get_current_user() is not None:
         next_url = request.args.get("next") or url_for("workspace")
         return redirect(next_url)
-    return render_template("login.html", csrf_token=generate_csrf_token())
+    import os
+    demo_username = os.getenv("DEMO_USERNAME") or "user-12"
+    demo_password = os.getenv("DEMO_PASSWORD") or "user1234"
+    return render_template(
+        "login.html",
+        csrf_token=generate_csrf_token(),
+        demo_username=demo_username,
+        demo_password=demo_password,
+    )
 
 
 # ── API Auth Endpoints ────────────────────────────────────────────────────────

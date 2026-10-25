@@ -302,3 +302,111 @@ class TestLiveStorageAndEvidenceIntegrity:
                 if aj:
                     data = json.loads(aj)
                     assert data.get("is_demo", False) is False, "Evidence analysis must not be fake demo data"
+
+
+class TestFreshDeploymentStartupProvisioning:
+    """Verify fresh deployment startup provisioning (simulating fresh Render container boot)."""
+
+    def test_fresh_database_auto_provisions_evaluator_on_startup(self, tmp_path):
+        """Simulate a completely fresh deployment without any existing database.
+
+        Verifies that create_app() automatically provisions user-12 so they can immediately
+        authenticate without any manual provisioning script.
+        """
+        isolated_dir = tmp_path / "fresh_render_deploy"
+        cfg = {
+            "TESTING": True,
+            "DEBUG": False,
+            "STORAGE_DIR": isolated_dir,
+            "CASES_DIR": isolated_dir / "cases",
+            "UPLOADS_DIR": isolated_dir / "uploads",
+            "REPORTS_DIR": isolated_dir / "reports",
+            "DB_PATH": isolated_dir / "crimevision_fresh.db",
+            "SECRET_KEY": "fresh-deployment-test-secret-key-32!",
+        }
+        app = create_app(config_override=cfg)
+        client = app.test_client()
+
+        # 1. Fetch CSRF token
+        csrf_res = client.get("/api/auth/csrf")
+        assert csrf_res.status_code == 200
+        csrf_token = csrf_res.get_json()["csrf_token"]
+
+        # 2. Login immediately with user-12 / user1234
+        login_resp = client.post(
+            "/api/auth/login",
+            json={"username": "user-12", "password": "user1234"},
+            headers={"X-CSRF-Token": csrf_token},
+        )
+        assert login_resp.status_code == 200
+        data = login_resp.get_json()
+        assert data["status"] == "authenticated"
+        assert data["user"]["username"] == "user-12"
+        assert data["user"]["role"] == "user"
+
+        # 3. Check cases for user-12 — should have the provisioned active workspace case
+        cases_resp = client.get("/api/cases", headers={"X-CSRF-Token": csrf_token})
+        assert cases_resp.status_code == 200
+        cases = cases_resp.get_json()["cases"]
+        assert len(cases) >= 1
+        case_id = cases[0]["case_id"]
+
+        # 4. Check evidence in this case — preloaded multimodal evidence items exist
+        ev_resp = client.get(f"/api/cases/{case_id}/evidence", headers={"X-CSRF-Token": csrf_token})
+        assert ev_resp.status_code == 200
+        evidence_items = ev_resp.get_json()["evidence"]
+        modalities = {e["modality"] for e in evidence_items}
+        assert "image" in modalities
+        assert "audio" in modalities
+        assert "video" in modalities
+
+    def test_custom_evaluator_credentials_via_env_vars(self, tmp_path, monkeypatch):
+        """Simulate Render deployment with custom DEMO_USERNAME and DEMO_PASSWORD env vars."""
+        monkeypatch.setenv("DEMO_USERNAME", "custom_evaluator")
+        monkeypatch.setenv("DEMO_PASSWORD", "CustomPass987!")
+        monkeypatch.setenv("DEMO_EMAIL", "custom_eval@crimevision.ai")
+
+        isolated_dir = tmp_path / "custom_render_deploy"
+        cfg = {
+            "TESTING": True,
+            "DEBUG": False,
+            "STORAGE_DIR": isolated_dir,
+            "CASES_DIR": isolated_dir / "cases",
+            "UPLOADS_DIR": isolated_dir / "uploads",
+            "REPORTS_DIR": isolated_dir / "reports",
+            "DB_PATH": isolated_dir / "crimevision_custom.db",
+            "SECRET_KEY": "custom-deployment-test-secret-key-32!",
+        }
+        app = create_app(config_override=cfg)
+        client = app.test_client()
+
+        # 1. Check login page displays the custom username
+        login_page_resp = client.get("/login")
+        assert login_page_resp.status_code == 200
+        html = login_page_resp.get_data(as_text=True)
+        assert "custom_evaluator" in html
+
+        # 2. Get CSRF token
+        csrf_res = client.get("/api/auth/csrf")
+        csrf_token = csrf_res.get_json()["csrf_token"]
+
+        # 3. Authenticate with custom credentials
+        login_resp = client.post(
+            "/api/auth/login",
+            json={"username": "custom_evaluator", "password": "CustomPass987!"},
+            headers={"X-CSRF-Token": csrf_token},
+        )
+        assert login_resp.status_code == 200
+        data = login_resp.get_json()
+        assert data["user"]["username"] == "custom_evaluator"
+
+        # 4. Wrong password rejected
+        csrf_res2 = client.get("/api/auth/csrf")
+        csrf_token2 = csrf_res2.get_json()["csrf_token"]
+        bad_resp = client.post(
+            "/api/auth/login",
+            json={"username": "custom_evaluator", "password": "WrongPassword99!"},
+            headers={"X-CSRF-Token": csrf_token2},
+        )
+        assert bad_resp.status_code == 401
+

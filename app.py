@@ -81,9 +81,14 @@ def create_app(config_override: dict | None = None) -> Flask:
     # ── CSRF Protection ───────────────────────────────────────────────────────
     init_csrf(app)
 
-    # ── Database ──────────────────────────────────────────────────────────────
+    # ── Database & Seed Provisioning ──────────────────────────────────────────
     with app.app_context():
         init_db(app.config["DB_PATH"])
+        try:
+            from storage.provision_demo import ensure_demo_evaluator
+            ensure_demo_evaluator()
+        except Exception as exc:  # noqa: BLE001
+            app.logger.warning("Could not auto-provision demo evaluator on startup: %s", exc)
 
     app.teardown_appcontext(close_db)
 

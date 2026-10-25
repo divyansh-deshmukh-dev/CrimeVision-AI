@@ -82,9 +82,11 @@ class Config:
     AWS_SECRET_ACCESS_KEY: str | None = os.getenv("AWS_SECRET_ACCESS_KEY")
     S3_ENDPOINT_URL: str | None = os.getenv("S3_ENDPOINT_URL")
 
-    # ── Demo Account Configuration ────────────────────────────────────────────
+    # ── Demo & Evaluator Account Configuration ────────────────────────────────
     DEMO_LOGIN_ENABLED: bool = os.getenv("DEMO_LOGIN_ENABLED", "1").lower() in ("1", "true", "yes")
-    DEMO_USERNAME: str = os.getenv("DEMO_USERNAME", "demo_mentor").strip().lower()
+    DEMO_USERNAME: str = os.getenv("DEMO_USERNAME", "user-12").strip().lower()
+    DEMO_PASSWORD: str = os.getenv("DEMO_PASSWORD", "user1234")
+    DEMO_EMAIL: str = os.getenv("DEMO_EMAIL", "user@gmail.com").strip().lower()
 
     # ── Storage paths (uses /tmp on serverless Vercel) ─────────────────────────
     if os.getenv("VERCEL"):
