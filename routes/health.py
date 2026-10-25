@@ -33,10 +33,22 @@ def health_check():
         status = "degraded"
 
     # ── Storage directories ───────────────────────────────────────────────────
+    from pathlib import Path
+
     for key in ("STORAGE_DIR", "CASES_DIR", "UPLOADS_DIR", "REPORTS_DIR"):
-        path = current_app.config[key]
-        checks[key.lower()] = "ok" if path.is_dir() else "missing"
-        if not path.is_dir():
+        raw_path = current_app.config.get(key)
+        if raw_path is None:
+            checks[key.lower()] = "missing"
+            status = "degraded"
+            continue
+        try:
+            p = Path(raw_path)
+            is_d = p.is_dir()
+            checks[key.lower()] = "ok" if is_d else "missing"
+            if not is_d:
+                status = "degraded"
+        except Exception as exc:  # noqa: BLE001
+            checks[key.lower()] = f"error: {exc}"
             status = "degraded"
 
     # ── AI API keys ──────────────────────────────────────────────────────────
@@ -44,6 +56,16 @@ def health_check():
     checks["groq_api_key"] = "configured" if (groq_key and groq_key.strip()) else "not_configured"
     gemini_key = current_app.config.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
     checks["gemini_api_key"] = "configured" if (gemini_key and gemini_key.strip()) else "not_configured"
+
+    # ── Core AI Engine (PyTorch / Vision Runtime) ─────────────────────────────
+    try:
+        import torch
+        import transformers
+        checks["torch"] = f"available ({torch.__version__})"
+        checks["ai_engine"] = "cuda" if torch.cuda.is_available() else "cpu"
+    except ImportError as exc:  # noqa: BLE001
+        checks["torch"] = "not_installed"
+        checks["ai_engine"] = f"unavailable: {exc}"
 
     return (
         jsonify(
@@ -55,5 +77,5 @@ def health_check():
                 "checks": checks,
             }
         ),
-        200 if status == "ok" else 207,
+        200,
     )

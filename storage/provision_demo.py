@@ -491,10 +491,31 @@ def ensure_demo_evaluator(
     else:
         img_key = img_row["filename"]
 
+    from services.provenance import ResultSource, build_provenance_record
+
+    seeded_img_provenance = build_provenance_record(
+        modality="image",
+        result_source=ResultSource.PRECOMPUTED_DEMO_RESULT,
+        execution_status="completed",
+        evidence_id=img_ev_id,
+        case_id=case_id,
+        input_sha256="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        duration_ms=0.0,
+        is_demo=False,
+        models=[
+            {"name": "RT-DETR", "model_id": "PekingU/rtdetr_r50vd", "status": "precomputed_baseline"},
+            {"name": "BLIP", "model_id": "Salesforce/blip-image-captioning-large", "status": "precomputed_baseline"},
+            {"name": "CLIP", "model_id": "openai/clip-vit-base-patch32", "status": "precomputed_baseline"},
+        ],
+        diagnostic_details={"notice": "Precomputed forensic baseline detections for initial inspection."},
+    )
+
     img_analysis = {
         "status": "completed",
         "is_demo": False,
-        "provenance": "Verified Forensic Baseline (PekingU/rtdetr_r50vd)",
+        "is_seeded_sample": True,
+        "result_source": "precomputed_demo_result",
+        "provenance": seeded_img_provenance,
         "detection": {
             "status": "success",
             "model": "PekingU/rtdetr_r50vd",
@@ -627,6 +648,8 @@ def ensure_demo_evaluator(
             try:
                 parsed = json.loads(existing_aj)
                 if "detection" not in parsed or not parsed.get("detection", {}).get("objects"):
+                    needs_update = True
+                elif "is_seeded_sample" not in parsed:
                     needs_update = True
             except Exception:
                 needs_update = True

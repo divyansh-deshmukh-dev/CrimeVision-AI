@@ -27,6 +27,7 @@ const API = {
   deleteEvidence:(cid, eid) => `/api/cases/${cid}/evidence/${eid}`,
   evidenceFile:  (cid, eid) => `/api/cases/${cid}/evidence/${eid}/file`,
   analyzeImage:  (cid, eid) => `/api/cases/${cid}/evidence/${eid}/analyze/image`,
+  restoreSeededSample: (cid, eid) => `/api/cases/${cid}/evidence/${eid}/restore_seeded_sample`,
   analyzeAudio:  (cid, eid) => `/api/cases/${cid}/evidence/${eid}/analyze/audio`,
   audioIntelligence: (cid, eid) => `/api/cases/${cid}/evidence/${eid}/analyze/audio/intelligence`,
   analyzeVideo:  (cid, eid) => `/api/cases/${cid}/evidence/${eid}/analyze/video`,
@@ -1178,13 +1179,20 @@ async function runImageAnalysis() {
       const cur = state.evidence.find(e => e.evidence_id === state.activeEvidenceId);
 
       if (backendStatus === "failed") {
-        clearImageAnalysisFindings();
+        const errorMsg =
+          (data && data.error) ||
+          (analysisData && analysisData.error) ||
+          (analysisData && analysisData.detection && analysisData.detection.error) ||
+          "Live neural inference could not complete on this host.";
+
         if (dom.imageStatusBadge) {
-          dom.imageStatusBadge.textContent = "Analysis Failed";
+          dom.imageStatusBadge.textContent = "Inference Unavailable";
           dom.imageStatusBadge.className = "badge badge-crimson badge-sm";
+          dom.imageStatusBadge.title = errorMsg;
         }
         if (cur) cur.analysis_status = "failed";
-        showToast((data && data.error) || "Image analysis returned failure status.", "error");
+        showToast(errorMsg, "error", 6000);
+        renderInferenceFailureUI(errorMsg, analysisData);
       } else if (backendStatus === "partial") {
         if (dom.imageStatusBadge) {
           dom.imageStatusBadge.textContent = "Analysis Partial";
@@ -1199,38 +1207,106 @@ async function runImageAnalysis() {
         drawBoundingBoxes(analysisData);
       } else {
         if (dom.imageStatusBadge) {
-          dom.imageStatusBadge.textContent = "Analysis Complete";
+          dom.imageStatusBadge.textContent = "Live Neural Output";
           dom.imageStatusBadge.className = "badge badge-emerald badge-sm";
         }
         if (cur) {
           cur.analysis_json = analysisData;
           cur.analysis_status = "completed";
         }
-        showToast("RT-DETR neural visual analysis completed.", "success");
+        showToast("RT-DETR live visual analysis executed successfully.", "success");
         renderImageAnalysisFindings(analysisData);
         drawBoundingBoxes(analysisData);
       }
     } else {
-      clearImageAnalysisFindings();
+      const errorMsg =
+        (data && data.error) ||
+        `Error ${status}: Live inference unavailable on this deployment.`;
       const cur = state.evidence.find(e => e.evidence_id === state.activeEvidenceId);
       if (cur) cur.analysis_status = "failed";
       if (dom.imageStatusBadge) {
-        dom.imageStatusBadge.textContent = "Analysis Failed";
+        dom.imageStatusBadge.textContent = "Inference Unavailable";
         dom.imageStatusBadge.className = "badge badge-crimson badge-sm";
+        dom.imageStatusBadge.title = errorMsg;
       }
-      showToast((data && data.error) || `Error ${status}: Analysis failed.`, "error");
+      showToast(errorMsg, "error", 6000);
+      renderInferenceFailureUI(errorMsg, null);
     }
   } catch (err) {
-    clearImageAnalysisFindings();
     const cur = state.evidence.find(e => e.evidence_id === state.activeEvidenceId);
     if (cur) cur.analysis_status = "failed";
     if (dom.imageStatusBadge) {
-      dom.imageStatusBadge.textContent = "Analysis Failed";
+      dom.imageStatusBadge.textContent = "Inference Unavailable";
       dom.imageStatusBadge.className = "badge badge-crimson badge-sm";
+      dom.imageStatusBadge.title = err.message;
     }
-    showToast(`Analysis request failed: ${err.message}`, "error");
+    showToast(`Analysis request failed: ${err.message}`, "error", 6000);
+    renderInferenceFailureUI(`Analysis request failed: ${err.message}`, null);
   } finally {
     if (dom.btnRunImageAnalysis) dom.btnRunImageAnalysis.disabled = false;
+  }
+}
+
+function renderInferenceFailureUI(errorMsg, analysisData) {
+  if (dom.imgAiSceneSummaryContent) {
+    dom.imgAiSceneSummaryContent.innerHTML = `
+      <div class="provenance-banner provenance-banner--failed" style="padding:12px; background:rgba(239, 68, 68, 0.08); border-left:3px solid #EF4444; border-radius:0 6px 6px 0;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span class="badge badge-crimson badge-xs" style="font-weight:700;">LIVE INFERENCE UNAVAILABLE</span>
+          <button class="btn btn-secondary btn-xs btn-restore-sample" id="btn-restore-sample-summary" style="font-size:11px; padding:3px 8px;">
+            Restore Sample Baseline
+          </button>
+        </div>
+        <p style="font-size:12.5px; color:var(--text-primary); margin:0 0 6px 0; line-height:1.45;">
+          ${escapeHtml(errorMsg)}
+        </p>
+        <p style="font-size:11.5px; color:var(--text-muted); margin:0; line-height:1.4;">
+          The cloud runtime cannot run heavy neural weights (RT-DETR/CLIP/BLIP) under host limits (e.g. Render 512MB RAM or 30s worker timeout). Run locally for full live CPU/GPU execution.
+        </p>
+      </div>
+    `;
+    const btn = document.getElementById("btn-restore-sample-summary");
+    if (btn) btn.addEventListener("click", restoreSampleBaseline);
+  }
+
+  if (dom.rtdetrContent) {
+    dom.rtdetrContent.innerHTML = `
+      <div style="padding:12px; background:rgba(239,68,68,0.05); border:1px dashed rgba(239,68,68,0.25); border-radius:6px; text-align:center;">
+        <p style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;">
+          Live object detection could not be computed on this host.
+        </p>
+        <button class="btn btn-secondary btn-xs btn-restore-sample" id="btn-restore-sample-rtdetr">
+          View Precomputed Sample Baseline (4 objects)
+        </button>
+      </div>
+    `;
+    const btn2 = document.getElementById("btn-restore-sample-rtdetr");
+    if (btn2) btn2.addEventListener("click", restoreSampleBaseline);
+  }
+}
+
+async function restoreSampleBaseline() {
+  if (!state.activeCaseId || !state.activeEvidenceId) return;
+  try {
+    const { ok, data } = await apiFetch(API.restoreSeededSample(state.activeCaseId, state.activeEvidenceId), { method: "POST" });
+    if (ok && data && data.analysis) {
+      let analysisData = data.analysis;
+      if (typeof analysisData === "string") {
+        try { analysisData = JSON.parse(analysisData); } catch (e) {}
+      }
+      const cur = state.evidence.find(e => e.evidence_id === state.activeEvidenceId);
+      if (cur) {
+        cur.analysis_json = analysisData;
+        cur.analysis_status = "completed";
+      }
+      renderImageAnalysisFindings(analysisData);
+      drawBoundingBoxes(analysisData);
+      showToast("Restored precomputed baseline sample detections.", "info");
+    } else {
+      showToast((data && data.error) || "Could not restore sample data.", "error");
+    }
+  } catch (err) {
+    showToast(`Failed to restore sample: ${err.message}`, "error");
   }
 }
 
@@ -1338,6 +1414,30 @@ function renderImageAnalysisFindings(analysis) {
     ? analysis
     : synthesizeClientSideImageSummaries(analysis);
 
+  const isSeededSample =
+    analysis.is_seeded_sample === true ||
+    analysis.result_source === "precomputed_demo_result" ||
+    (analysis.provenance && (
+      analysis.provenance.result_source === "precomputed_demo_result" ||
+      analysis.provenance.is_demo === true ||
+      analysis.provenance === "Verified Forensic Baseline (PekingU/rtdetr_r50vd)"
+    ));
+
+  if (dom.imageStatusBadge) {
+    if (isSeededSample) {
+      dom.imageStatusBadge.textContent = "Seeded Sample Baseline";
+      dom.imageStatusBadge.className = "badge badge-cobalt badge-sm";
+      dom.imageStatusBadge.title = "Precomputed forensic baseline detections. Click 'Run Image Analysis' to execute live on host.";
+    } else if (analysis.status === "completed") {
+      dom.imageStatusBadge.textContent = "Live Neural Output";
+      dom.imageStatusBadge.className = "badge badge-emerald badge-sm";
+      dom.imageStatusBadge.title = "Live neural network forward pass executed on host.";
+    } else if (analysis.status === "partial") {
+      dom.imageStatusBadge.textContent = "Partial Inference";
+      dom.imageStatusBadge.className = "badge badge-amber badge-sm";
+    }
+  }
+
   // 1. Statistics Strip
   const stats = synth.statistics || {};
   const rawObjects =
@@ -1369,7 +1469,26 @@ function renderImageAnalysisFindings(analysis) {
   // 2. AI Scene Summary
   if (dom.imgAiSceneSummaryContent) {
     const summaryText = synth.scene_summary || "Scene summary pending.";
+    let bannerHtml = "";
+    if (isSeededSample) {
+      bannerHtml = `
+        <div style="margin-bottom:8px; padding:6px 10px; background:rgba(56, 189, 248, 0.08); border-left:3px solid var(--cyan-primary); border-radius:0 4px 4px 0; display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:11px; font-weight:700; color:var(--cyan-primary); letter-spacing:0.04em;">PROVENANCE: SEEDED SAMPLE BASELINE</span>
+          <span style="font-size:10.5px; color:var(--text-muted);">Precomputed Demo Data</span>
+        </div>
+      `;
+    } else if (analysis.result_source === "fresh_inference") {
+      const dur = analysis.provenance?.inference_duration_ms ? `${analysis.provenance.inference_duration_ms}ms` : "Live Host";
+      bannerHtml = `
+        <div style="margin-bottom:8px; padding:6px 10px; background:rgba(16, 185, 129, 0.08); border-left:3px solid #10B981; border-radius:0 4px 4px 0; display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:11px; font-weight:700; color:#34D399; letter-spacing:0.04em;">PROVENANCE: LIVE NEURAL INFERENCE (RT-DETR)</span>
+          <span style="font-size:10.5px; color:var(--text-muted);">${dur}</span>
+        </div>
+      `;
+    }
+
     dom.imgAiSceneSummaryContent.innerHTML = `
+      ${bannerHtml}
       <div style="font-size:13px; line-height:1.55; color:var(--text-primary); border-left:3px solid var(--cyan-primary); padding-left:10px;">
         ${escapeHtml(summaryText)}
       </div>
@@ -2002,6 +2121,25 @@ function drawBoundingBoxes(analysis) {
   const maxX = geom.offsetX + geom.renderW;
   const minY = geom.offsetY;
   const maxY = geom.offsetY + geom.renderH;
+
+  // Provenance Watermark Pill on image corner
+  const isSeeded =
+    analysis.is_seeded_sample === true ||
+    analysis.result_source === "precomputed_demo_result" ||
+    (analysis.provenance && (
+      analysis.provenance.result_source === "precomputed_demo_result" ||
+      analysis.provenance.is_demo === true ||
+      analysis.provenance === "Verified Forensic Baseline (PekingU/rtdetr_r50vd)"
+    ));
+
+  const tagText = isSeeded ? "SEEDED SAMPLE BASELINE" : "LIVE NEURAL INFERENCE";
+  const tagBg = isSeeded ? "rgba(14, 165, 233, 0.9)" : "rgba(16, 185, 129, 0.9)";
+  ctx.font = "700 10px 'Plus Jakarta Sans', sans-serif";
+  const tagW = ctx.measureText(tagText).width + 14;
+  ctx.fillStyle = tagBg;
+  ctx.fillRect(minX + 8, minY + 8, tagW, 18);
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillText(tagText, minX + 15, minY + 21);
 
   objects.forEach(obj => {
     const norm = extractNormalizedBox(obj, geom);
@@ -4714,14 +4852,20 @@ async function refreshHealth(silent = false) {
   try {
     const { ok, data } = await apiFetch(API.health);
     if (ok && data && (data.status === "ok" || data.status === "healthy")) {
-      setHealthOnline();
+      setHealthOnline("Core Engine: Online");
+      if (dom.healthStatusPill && data.checks) {
+        dom.healthStatusPill.title = Object.entries(data.checks).map(([k, v]) => `${k}: ${v}`).join("\n");
+      }
       if (!silent) {
         showToast("System diagnostic verified: All storage and AI services online.", "info", 2000);
       }
     } else if (ok && data && data.status === "degraded") {
+      if (dom.healthStatusPill && data.checks) {
+        dom.healthStatusPill.title = Object.entries(data.checks).map(([k, v]) => `${k}: ${v}`).join("\n");
+      }
       setHealthWarning("Core Engine: Degraded");
       if (!silent) {
-        showToast("System diagnostic: Some services degraded.", "warning");
+        showToast("System diagnostic: Some services or storage degraded.", "warning");
       }
     } else {
       setHealthDisconnected("Core Engine: Disconnected");

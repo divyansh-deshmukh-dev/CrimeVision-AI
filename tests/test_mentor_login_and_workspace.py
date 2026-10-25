@@ -836,3 +836,191 @@ class TestFreshDeploymentStartupProvisioning:
         assert fallback_data.startswith(b"\x89PNG")
 
 
+class TestEngineHealthAndInferenceResilience:
+    """Validate Core Engine health reporting, provenance distinction, and inference error handling."""
+
+    def test_health_endpoint_returns_200_and_includes_ai_engine(self):
+        """Verify /api/health always returns 200 with structured JSON and AI engine status."""
+        app = create_app()
+        client = app.test_client()
+
+        res = client.get("/api/health")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data is not None
+        assert data["status"] in ("ok", "degraded")
+        assert "checks" in data
+        checks = data["checks"]
+        assert "ai_engine" in checks
+        assert "torch" in checks
+        assert "database" in checks
+        assert checks["database"] == "ok"
+
+    def test_health_endpoint_resilient_to_missing_storage_dirs(self, tmp_path):
+        """Verify /api/health gracefully reports degraded without 500 when storage dirs are missing."""
+        isolated = tmp_path / "degraded_health"
+        isolated.mkdir(parents=True, exist_ok=True)
+        missing_uploads = isolated / "nonexistent_uploads_dir"
+
+        cfg = {
+            "TESTING": True,
+            "STORAGE_DIR": isolated,
+            "CASES_DIR": isolated / "cases",
+            "UPLOADS_DIR": missing_uploads,  # Does not exist
+            "REPORTS_DIR": isolated / "reports",
+            "DB_PATH": isolated / "health.db",
+            "SECRET_KEY": "health-test-secret-key-32-bytes!",
+        }
+
+        app = create_app(config_override=cfg)
+        client = app.test_client()
+
+        # Delete the directory tree after app creation to simulate runtime disk missing
+        import os
+        from pathlib import Path
+        import shutil
+        import stat
+        for root, dirs, files in os.walk(str(missing_uploads)):
+            for f in files:
+                p = Path(root) / f
+                try:
+                    p.chmod(stat.S_IWRITE)
+                except OSError:
+                    pass
+        shutil.rmtree(str(missing_uploads), ignore_errors=True)
+
+        res = client.get("/api/health")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["status"] == "degraded"
+        assert data["checks"]["uploads_dir"] == "missing"
+
+    def test_seeded_sample_distinguished_from_inference_in_db(self, tmp_path):
+        """Verify seeded demo evidence is explicitly marked as a precomputed sample baseline."""
+        isolated = tmp_path / "prov_test"
+        cfg = {
+            "TESTING": True,
+            "STORAGE_DIR": isolated,
+            "CASES_DIR": isolated / "cases",
+            "UPLOADS_DIR": isolated / "uploads",
+            "REPORTS_DIR": isolated / "reports",
+            "DB_PATH": isolated / "prov.db",
+            "SECRET_KEY": "prov-test-secret-key-32-bytes!",
+        }
+        app = create_app(config_override=cfg)
+        with app.app_context():
+            from storage.database import get_db
+            db = get_db()
+            row = db.execute("SELECT analysis_json FROM evidence WHERE evidence_id = 'ev_b31dacb7da6f'").fetchone()
+            assert row is not None
+            analysis = json.loads(row["analysis_json"])
+            assert analysis.get("is_seeded_sample") is True
+            assert analysis.get("result_source") == "precomputed_demo_result"
+            assert "provenance" in analysis
+            assert analysis["provenance"]["result_source"] == "precomputed_demo_result"
+
+    def test_restore_seeded_sample_endpoint(self, tmp_path):
+        """Verify endpoint restores precomputed baseline sample detections after modification."""
+        isolated = tmp_path / "restore_test"
+        cfg = {
+            "TESTING": True,
+            "STORAGE_DIR": isolated,
+            "CASES_DIR": isolated / "cases",
+            "UPLOADS_DIR": isolated / "uploads",
+            "REPORTS_DIR": isolated / "reports",
+            "DB_PATH": isolated / "restore.db",
+            "SECRET_KEY": "restore-test-secret-key-32-bytes!",
+        }
+        app = create_app(config_override=cfg)
+        client = app.test_client()
+
+        # Login
+        csrf_tok = client.get("/api/auth/csrf").get_json()["csrf_token"]
+        login_resp = client.post(
+            "/api/auth/login",
+            json={"username": "user-12", "password": "user1234"},
+            headers={"X-CSRF-Token": csrf_tok},
+        )
+        assert login_resp.status_code == 200
+
+        # Simulate overwriting analysis with failed inference state
+        with app.app_context():
+            from storage.database import get_db
+            db = get_db()
+            db.execute(
+                "UPDATE evidence SET analysis_json = '{\"status\": \"failed\", \"is_seeded_sample\": false}' WHERE evidence_id = 'ev_b31dacb7da6f'"
+            )
+            db.commit()
+
+        # Call restore endpoint
+        csrf_tok2 = client.get("/api/auth/csrf").get_json()["csrf_token"]
+        res = client.post(
+            "/api/cases/case_bd736d27b0e9/evidence/ev_b31dacb7da6f/restore_seeded_sample",
+            headers={"X-CSRF-Token": csrf_tok2},
+        )
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["status"] == "success"
+        restored_analysis = data["analysis"]
+        if isinstance(restored_analysis, str):
+            restored_analysis = json.loads(restored_analysis)
+        assert restored_analysis["is_seeded_sample"] is True
+        assert len(restored_analysis["detection"]["objects"]) == 4
+
+    def test_image_analysis_error_handling_when_model_fails(self, tmp_path, monkeypatch):
+        """Verify analyze_image_endpoint returns actionable error JSON when inference fails, without crashing."""
+        isolated = tmp_path / "fail_test"
+        cfg = {
+            "TESTING": True,
+            "STORAGE_DIR": isolated,
+            "CASES_DIR": isolated / "cases",
+            "UPLOADS_DIR": isolated / "uploads",
+            "REPORTS_DIR": isolated / "reports",
+            "DB_PATH": isolated / "fail.db",
+            "SECRET_KEY": "fail-test-secret-key-32-bytes!",
+        }
+        app = create_app(config_override=cfg)
+        client = app.test_client()
+
+        # Login
+        csrf_tok = client.get("/api/auth/csrf").get_json()["csrf_token"]
+        client.post(
+            "/api/auth/login",
+            json={"username": "user-12", "password": "user1234"},
+            headers={"X-CSRF-Token": csrf_tok},
+        )
+
+        # Simulate runtime memory/dependency failure during inference
+        def mock_failing_pipeline(*args, **kwargs):
+            return {
+                "status": "failed",
+                "is_seeded_sample": False,
+                "error": "Out of memory: Host cannot allocate RT-DETR weights under 512MB RAM constraint.",
+                "detection": {
+                    "status": "failed",
+                    "error": "Out of memory: Host cannot allocate RT-DETR weights under 512MB RAM constraint.",
+                    "objects": [],
+                },
+                "clip": {"status": "unavailable", "matches": []},
+                "caption": {"status": "unavailable", "caption": None},
+                "submodel_statuses": {"rtdetr": "failed", "clip": "unavailable", "blip": "unavailable"},
+            }
+
+        monkeypatch.setattr(
+            "services.image_analyzer.ImageAnalyzer.analyze_image_pipeline",
+            mock_failing_pipeline,
+        )
+
+        csrf_tok2 = client.get("/api/auth/csrf").get_json()["csrf_token"]
+        res = client.post(
+            "/api/cases/case_bd736d27b0e9/evidence/ev_b31dacb7da6f/analyze/image",
+            headers={"X-CSRF-Token": csrf_tok2},
+        )
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["status"] == "failed"
+        assert "512MB RAM constraint" in data["error"]
+        assert data["analysis"]["is_seeded_sample"] is False
+
+
+

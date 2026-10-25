@@ -158,6 +158,16 @@ class ImageAnalyzer:
         if not pil_images:
             return []
 
+        if not TORCH_AVAILABLE or torch is None:
+            return [
+                {
+                    "status": "unavailable",
+                    "error": "PyTorch (torch) is not available in this runtime environment.",
+                    "objects": [],
+                }
+                for _ in pil_images
+            ]
+
         self._setup_torch_runtime()
         try:
             from transformers import RTDetrForObjectDetection, RTDetrImageProcessor
@@ -551,8 +561,10 @@ class ImageAnalyzer:
             submodel_statuses=submodel_statuses,
         )
 
-        return {
+        pipeline_out: Dict[str, Any] = {
             "status": overall_status,
+            "is_seeded_sample": False,
+            "result_source": ResultSource.FRESH_INFERENCE.value,
             "image_metadata": metadata,
             "detection": rtdetr_result,
             "clip": clip_result,
@@ -561,6 +573,16 @@ class ImageAnalyzer:
             "provenance": provenance,
             **forensic_summaries,
         }
+        if overall_status == "failed":
+            err_msg = (
+                rtdetr_result.get("error")
+                or clip_result.get("error")
+                or blip_result.get("error")
+                or "Image analysis pipeline failed to execute on current host."
+            )
+            pipeline_out["error"] = err_msg
+
+        return pipeline_out
 
     @staticmethod
     def synthesize_forensic_summaries(
