@@ -1,0 +1,73 @@
+# CrimeVision AI — .gitignore
+
+# ── Environment & secrets ──────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets/
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+.venv/
+venv/
+env/
+dist/
+build/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# ── Storage (evidence, reports, DB, backups, scratch) ─────────────────────────
+storage/uploads/
+storage/reports/
+storage/backups/
+storage/scratch/
+storage_test/
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+storage/*.db
+storage/*.db-wal
+storage/*.db-shm
+storage/*.db-journal
+
+# ── AI model weights & Hugging Face cache ────────────────────────────────────
+models/
+.cache/
+*.bin
+*.safetensors
+*.onnx
+*.pt
+*.pth
+
+# ── pytest / coverage & test scratch ──────────────────────────────────────────
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+*.cover
+tests/scratch/
+
+# ── Intermediate planning & temporary development files ───────────────────────
+implementation_plan*.md
+*.tmp
+*.bak
+scratch/
+*.log
+
+# ── IDE & OS ──────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# ── Project documentation assets ──────────────────────────────────────────────
+CrimeVision_AI_Project_Blueprint.pdf

@@ -1,0 +1,1884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CrimeVision AI — Investigation Workspace</title>
+  <meta name="csrf-token" content="{{ csrf_token }}" />
+
+  <!-- Google Fonts: Inter & JetBrains Mono (Stitch Design System) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet"
+  />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
+    rel="stylesheet"
+  />
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/workspace.css') }}" />
+</head>
+<body class="workspace-body">
+
+  <!-- ════════════════════════════════════════════════════════════════════════
+       1. TOP APPLICATION BAR
+  ══════════════════════════════════════════════════════════════════════════ -->
+  <header class="app-topbar" id="ws-topbar">
+    <div class="topbar-left">
+      <a href="/" class="app-brand" title="CrimeVision AI — Return to platform overview">
+        <span class="brand-glyph" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="12 2 2 7 12 12 22 7 12 2" />
+            <polyline points="2 17 12 22 22 17" />
+            <polyline points="2 12 12 17 22 12" />
+          </svg>
+        </span>
+        <span class="brand-name">CrimeVision <span class="brand-accent">AI</span></span>
+        <span class="brand-badge">Workspace</span>
+      </a>
+
+      <!-- Case Context Selector -->
+      <div class="case-context-selector">
+        <label for="case-select" class="sr-only">Active Case</label>
+        <div class="select-wrapper">
+          <svg class="select-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+          </svg>
+          <select class="form-select" id="case-select">
+            <option value="">— Select or create case —</option>
+          </select>
+        </div>
+
+        <button class="btn btn-secondary btn-sm" id="btn-open-create-modal" title="Create a new investigation case">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          <span>New Case</span>
+        </button>
+
+        <div class="case-status-indicator" id="case-status-indicator">
+          <span class="status-dot status-dot--inactive" id="case-status-dot"></span>
+          <span class="case-status-text" id="workspace-case-name">No active case</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="topbar-right">
+      <!-- System Health Indicator -->
+      <div class="health-pill" id="health-status-pill" title="System services operational">
+        <span class="health-pulse"></span>
+        <span class="health-label" id="health-status-label">Core Engine: Ready</span>
+      </div>
+
+      <button class="btn btn-icon btn-ghost btn-sm" id="btn-refresh-health" title="Refresh system diagnostics" aria-label="Refresh system health">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="23 4 23 10 17 10" />
+          <polyline points="1 20 1 14 7 14" />
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+        </svg>
+      </button>
+
+      <!-- Toggle AI Assistant Drawer -->
+      <button class="btn btn-primary btn-sm btn-assistant-toggle" id="btn-toggle-assistant" title="Toggle AI Forensic Assistant panel">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="11" width="18" height="10" rx="2" />
+          <circle cx="12" cy="5" r="2" />
+          <path d="M12 7v4" />
+          <line x1="8" y1="16" x2="8.01" y2="16" />
+          <line x1="16" y1="16" x2="16.01" y2="16" />
+        </svg>
+        <span>AI Assistant</span>
+      </button>
+
+      <!-- User Profile Pill -->
+      <div class="user-pill" id="user-pill" style="display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px; background: rgba(14, 22, 36, 0.8); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 20px; font-size: 0.82rem; font-family: var(--font-mono); color: var(--text-body);">
+        <span style="width: 7px; height: 7px; border-radius: 50%; background: #10B981; box-shadow: 0 0 8px #10B981;"></span>
+        <span id="user-display-name" style="font-weight: 600; color: #FFF;">{{ current_user.display_name or current_user.username if current_user else 'Examiner' }}</span>
+        <span id="user-role-badge" style="font-size: 0.7rem; padding: 1px 5px; border-radius: 4px; background: rgba(0, 240, 255, 0.12); color: var(--cyan); border: 1px solid rgba(0, 240, 255, 0.25);">{{ current_user.role|upper if current_user else 'USER' }}</span>
+      </div>
+
+      <!-- Logout Button -->
+      <button class="btn btn-ghost btn-sm" id="btn-logout" title="Sign out of CrimeVision AI" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.25);">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+          <polyline points="16 17 21 12 16 7" />
+          <line x1="21" y1="12" x2="9" y2="12" />
+        </svg>
+        <span>Sign Out</span>
+      </button>
+
+      <!-- Exit to Landing Page -->
+      <a href="/" class="btn btn-ghost btn-sm" title="Exit workspace and return to platform overview">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+          <polyline points="16 17 21 12 16 7" />
+          <line x1="21" y1="12" x2="9" y2="12" />
+        </svg>
+        <span>Exit</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- ════════════════════════════════════════════════════════════════════════
+       2. WORKSPACE APPLICATION SHELL
+  ══════════════════════════════════════════════════════════════════════════ -->
+  <div class="app-layout">
+
+    <!-- ── LEFT NAVIGATION SIDEBAR ────────────────────────────────────────── -->
+    <aside class="app-sidebar" id="ws-sidebar">
+      <nav class="sidebar-nav" aria-label="Investigation tools navigation">
+        <div class="nav-section-title">Case Investigation</div>
+
+        <button class="nav-item nav-item--active" data-view="overview" id="nav-btn-overview">
+          <svg class="nav-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7" />
+            <rect x="14" y="3" width="7" height="7" />
+            <rect x="14" y="14" width="7" height="7" />
+            <rect x="3" y="14" width="7" height="7" />
+          </svg>
+          <span class="nav-label">Case Overview</span>
+        </button>
+
+        <button class="nav-item" data-view="evidence" id="nav-btn-evidence">
+          <svg class="nav-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+          </svg>
+          <span class="nav-label">Evidence Library</span>
+          <span class="nav-badge" id="sidebar-evidence-count">0</span>
+        </button>
+
+        <div class="nav-section-title">Analytical Engines</div>
+
+        <button class="nav-item tab-btn" data-view="image" data-tab="image" id="nav-btn-image">
+          <svg class="nav-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+            <circle cx="8.5" cy="8.5" r="1.5" />
+            <polyline points="21 15 16 10 5 21" />
+          </svg>
+          <span class="nav-label">Image Vision</span>
+        </button>
+
+        <button class="nav-item tab-btn" data-view="audio" data-tab="audio" id="nav-btn-audio">
+          <svg class="nav-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+            <line x1="12" y1="19" x2="12" y2="23" />
+            <line x1="8" y1="23" x2="16" y2="23" />
+          </svg>
+          <span class="nav-label">Audio Acoustic</span>
+        </button>
+
+        <button class="nav-item tab-btn" data-view="video" data-tab="video" id="nav-btn-video">
+          <svg class="nav-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="23 7 16 12 23 17 23 7" />
+            <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+          </svg>
+          <span class="nav-label">Video Temporal</span>
+        </button>
+
+        <div class="nav-section-title">Synthesis & Spatial</div>
+
+        <button class="nav-item tab-btn" data-view="fusion" data-tab="fusion" id="nav-btn-fusion">
+          <svg class="nav-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="18" cy="18" r="3" />
+            <circle cx="6" cy="6" r="3" />
+            <path d="M13 6h3a2 2 0 0 1 2 2v7" />
+            <line x1="6" y1="9" x2="6" y2="21" />
+          </svg>
+          <span class="nav-label">Evidence Fusion</span>
+        </button>
+
+        <button class="nav-item tab-btn" data-view="scene3d" data-tab="scene3d" id="nav-btn-scene3d">
+          <svg class="nav-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+            <line x1="12" y1="22.08" x2="12" y2="12" />
+          </svg>
+          <span class="nav-label">3D Spatial Scene</span>
+        </button>
+
+        <div class="nav-section-title">Documentation</div>
+
+        <button class="nav-item" data-view="reports" id="nav-btn-reports">
+          <svg class="nav-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+            <polyline points="10 9 9 9 8 9" />
+          </svg>
+          <span class="nav-label">Forensic Report</span>
+        </button>
+      </nav>
+
+      <!-- Sidebar Footer / Diagnostics Status -->
+      <div class="sidebar-footer">
+        <div class="system-summary-card">
+          <div class="summary-card-header">
+            <span class="summary-label">Storage Integrity</span>
+            <span class="badge badge-xs badge-emerald" id="storage-status-tag">Verified</span>
+          </div>
+          <p class="summary-detail">SHA-256 Custody Engine Active</p>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── MAIN CONTENT AREA (FOCUSED FEATURE VIEWS) ──────────────────────── -->
+    <main class="app-main-content" id="ws-main-content">
+
+      <!-- ════════════════════════════════════════════════════════════════════
+           VIEW 1: CASE OVERVIEW DASHBOARD
+      ══════════════════════════════════════════════════════════════════════ -->
+      <section class="feature-view feature-view--active" id="view-overview">
+        <div class="view-header">
+          <div>
+            <h1 class="view-title" id="overview-case-heading">Investigation Case Overview</h1>
+            <p class="view-subtitle" id="overview-case-sub">Select an active investigation case to inspect evidence status and analytics.</p>
+          </div>
+          <div class="view-actions">
+            <button class="btn btn-secondary btn-sm" id="btn-quick-upload">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              <span>Ingest Evidence</span>
+            </button>
+            <button class="btn btn-primary btn-sm" id="btn-quick-fusion">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="18" cy="18" r="3" />
+                <circle cx="6" cy="6" r="3" />
+                <path d="M13 6h3a2 2 0 0 1 2 2v7" />
+                <line x1="6" y1="9" x2="6" y2="21" />
+              </svg>
+              <span>Synthesize Fusion</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Metric Cards -->
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-icon metric-icon--blue">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+              </svg>
+            </div>
+            <div class="metric-body">
+              <span class="metric-label">Total Evidence Items</span>
+              <span class="metric-value" id="stat-total-evidence">0</span>
+              <span class="metric-meta" id="stat-evidence-meta">No files ingested</span>
+            </div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-icon metric-icon--cyan">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <polyline points="21 15 16 10 5 21" />
+              </svg>
+            </div>
+            <div class="metric-body">
+              <span class="metric-label">Visual Media</span>
+              <span class="metric-value" id="stat-image-count">0</span>
+              <span class="metric-meta">RT-DETR Object Detection</span>
+            </div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-icon metric-icon--emerald">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                <line x1="12" y1="19" x2="12" y2="23" />
+              </svg>
+            </div>
+            <div class="metric-body">
+              <span class="metric-label">Acoustic Audio</span>
+              <span class="metric-value" id="stat-audio-count">0</span>
+              <span class="metric-meta">Whisper Spectral Analysis</span>
+            </div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-icon metric-icon--amber">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="23 7 16 12 23 17 23 7" />
+                <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+              </svg>
+            </div>
+            <div class="metric-body">
+              <span class="metric-label">Surveillance Video</span>
+              <span class="metric-value" id="stat-video-count">0</span>
+              <span class="metric-meta">Frame-Sampled Temporal Detections</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Case Overview Content -->
+        <div class="dashboard-columns">
+          <!-- Active Case Details -->
+          <div class="card card-case-details">
+            <div class="card-header">
+              <h2 class="card-title">Case Metadata & Integrity</h2>
+              <span class="badge badge-emerald" id="overview-badge-status">Active</span>
+            </div>
+            <div class="card-body">
+              <div class="detail-row">
+                <span class="detail-key">Case ID:</span>
+                <span class="detail-val font-mono" id="overview-case-id">—</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-key">Created:</span>
+                <span class="detail-val" id="overview-case-created">—</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-key">Description:</span>
+                <span class="detail-val" id="overview-case-desc">No case selected</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-key">Custody Protocol:</span>
+                <span class="detail-val">SHA-256 Digest Verification on File Ingestion</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Actions & Pipeline Status -->
+          <div class="card card-pipelines">
+            <div class="card-header">
+              <h2 class="card-title">Forensic Engine Readiness</h2>
+            </div>
+            <div class="card-body">
+              <div class="engine-status-list">
+                <div class="engine-item">
+                  <div class="engine-info">
+                    <span class="engine-name">RT-DETR & BLIP/CLIP Vision</span>
+                    <span class="engine-desc">Object localization and forensic zero-shot classification</span>
+                  </div>
+                  <span class="badge badge-emerald badge-xs">Online</span>
+                </div>
+                <div class="engine-item">
+                  <div class="engine-info">
+                    <span class="engine-name">OpenAI Whisper Neural Transcription</span>
+                    <span class="engine-desc">Speech-to-text with timestamped segment alignment</span>
+                  </div>
+                  <span class="badge badge-emerald badge-xs">Online</span>
+                </div>
+                <div class="engine-item">
+                  <div class="engine-info">
+                    <span class="engine-name">Multimodal Correlation Synthesizer</span>
+                    <span class="engine-desc">Cross-modal entity reconciliation and conflict detection</span>
+                  </div>
+                  <span class="badge badge-emerald badge-xs">Online</span>
+                </div>
+                <div class="engine-item">
+                  <div class="engine-info">
+                    <span class="engine-name">Gemini Grounded Assistant</span>
+                    <span class="engine-desc">Evidence-scoped conversational assistant with citation verification</span>
+                  </div>
+                  <span class="badge badge-emerald badge-xs">Grounded</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Ingested Evidence Strip -->
+        <div class="card recent-evidence-card">
+          <div class="card-header">
+            <h2 class="card-title">Recent Case Evidence</h2>
+            <button class="btn btn-ghost btn-xs" id="btn-view-all-evidence">View All Evidence Library →</button>
+          </div>
+          <div class="card-body">
+            <div id="overview-evidence-empty" class="empty-state-mini">
+              <p class="muted">No evidence files ingested yet. Select Ingest Evidence to add multimedia files.</p>
+            </div>
+            <div class="evidence-strip-grid" id="overview-evidence-grid" style="display:none;"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════════════
+           VIEW 2: EVIDENCE LIBRARY & INGESTION
+      ══════════════════════════════════════════════════════════════════════ -->
+      <section class="feature-view" id="view-evidence" style="display:none;">
+        <div class="view-header">
+          <div>
+            <h1 class="view-title">Evidence Ingestion & Chain of Custody</h1>
+            <p class="view-subtitle">Ingest multimedia artifacts with automated SHA-256 tamper-evident integrity hashing.</p>
+          </div>
+        </div>
+
+        <div class="evidence-ingest-layout">
+          <!-- Ingest Dropzone Card -->
+          <div class="card ingest-card">
+            <div class="card-header">
+              <h2 class="card-title">Ingest Evidence Artifact</h2>
+              <span class="badge badge-cobalt badge-xs">Accepted: Images · Audio · Video (≤ 500MB)</span>
+            </div>
+            <div class="card-body">
+              <div class="upload-zone" id="upload-zone" tabindex="0" role="button" aria-label="Drop files or click to browse">
+                <div class="upload-icon-circle">
+                  <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                </div>
+                <div class="upload-text-group">
+                  <span class="upload-title">Drop forensic evidence file here</span>
+                  <span class="upload-hint">or click to browse local files</span>
+                </div>
+                <input type="file" id="file-input" accept="image/*,audio/*,video/*" class="upload-input" />
+              </div>
+
+              <div class="upload-status-bar" id="upload-status" aria-live="polite"></div>
+            </div>
+          </div>
+
+          <!-- Evidence Inventory Card -->
+          <div class="card inventory-card">
+            <div class="card-header">
+              <h2 class="card-title">Case Evidence Inventory</h2>
+              <span class="badge badge-slate badge-xs" id="inventory-count-badge">0 items</span>
+            </div>
+            <div class="card-body">
+              <div id="evidence-list-section">
+                <ul class="evidence-inventory-table" id="evidence-list" role="list"></ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════════════
+           VIEW 3: IMAGE ANALYSIS (RT-DETR · CLIP · BLIP)
+      ══════════════════════════════════════════════════════════════════════ -->
+      <section class="feature-view" id="view-image" style="display:none;">
+        <div class="view-header">
+          <div>
+            <h1 class="view-title">Neural Vision Analysis</h1>
+            <p class="view-subtitle">High-precision RT-DETR object detection, bounding box localization, and CLIP zero-shot classification.</p>
+          </div>
+          <div class="view-actions">
+            <div class="evidence-modality-selector-group">
+              <label for="select-image-evidence" class="input-inline-label">Select Image:</label>
+              <select id="select-image-evidence" class="form-input form-input-sm evidence-modality-select">
+                <option value="">No images available</option>
+              </select>
+            </div>
+            <span class="badge badge-cobalt badge-sm" id="image-status-badge">Ready</span>
+            <button class="btn btn-primary btn-sm" id="btn-run-image-analysis">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+              </svg>
+              <span>Run Image Analysis</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="tab-panel" id="panel-image" role="tabpanel">
+          <div class="analysis-split-layout">
+            <!-- Left: Viewport / Canvas -->
+            <div class="card media-card">
+              <div class="card-header media-header">
+                <span class="media-title" id="image-filename-display">Image Viewer</span>
+                <span class="badge badge-emerald badge-xs" id="rtdetr-count-badge" style="display:none;">0 objects</span>
+              </div>
+              <div class="media-canvas-wrapper" id="image-canvas-container">
+                <div class="image-stage-box" id="image-stage-box" style="display:none;">
+                  <img id="evidence-image" src="" alt="Evidence image preview" class="evidence-preview" />
+                  <canvas id="bbox-canvas" class="bbox-canvas"></canvas>
+                </div>
+                <div class="empty-media-placeholder" id="image-empty-placeholder">
+                  <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <polyline points="21 15 16 10 5 21" />
+                  </svg>
+                  <p>Select an image evidence item from the Evidence Library to inspect bounding box annotations.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: Complete Forensic Evidence Analysis Panel -->
+            <div class="analysis-results-column image-analysis-panel">
+              <!-- Metric Strip: Object & Person Statistics -->
+              <div class="image-stats-strip">
+                <div class="image-stat-card">
+                  <span class="stat-number" id="img-stat-total">0</span>
+                  <span class="stat-label">Total Entities</span>
+                </div>
+                <div class="image-stat-card">
+                  <span class="stat-number text-cyan" id="img-stat-persons">0</span>
+                  <span class="stat-label">Persons</span>
+                </div>
+                <div class="image-stat-card">
+                  <span class="stat-number text-blue" id="img-stat-vehicles">0</span>
+                  <span class="stat-label">Vehicles</span>
+                </div>
+                <div class="image-stat-card">
+                  <span class="stat-number text-crimson" id="img-stat-weapons">0</span>
+                  <span class="stat-label">Weapons / Risk</span>
+                </div>
+                <div class="image-stat-card">
+                  <span class="stat-number stat-badge-text" id="img-stat-scene">—</span>
+                  <span class="stat-label">Environment</span>
+                </div>
+              </div>
+
+              <!-- Sub-Navigation Tabs -->
+              <div class="image-subtabs-nav" role="tablist">
+                <button class="image-subtab-btn active" data-subtab="summary" role="tab" aria-selected="true">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                  <span>Summary & Visuals</span>
+                </button>
+                <button class="image-subtab-btn" data-subtab="facts" role="tab" aria-selected="false">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                  <span>Evidence Facts</span>
+                </button>
+                <button class="image-subtab-btn" data-subtab="scenarios" role="tab" aria-selected="false">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <span>Hypotheses</span>
+                </button>
+                <button class="image-subtab-btn" data-subtab="ask-ai" role="tab" aria-selected="false">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                  <span>Ask AI</span>
+                </button>
+              </div>
+
+              <!-- Subtab 1: Summary & Visuals -->
+              <div class="image-subtab-panel active" id="img-subtab-summary">
+                <!-- AI Scene Summary -->
+                <div class="card findings-card">
+                  <div class="card-header">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                      <span class="badge badge-cobalt badge-xs">Grounded</span>
+                      <h3 class="card-title">AI Scene Summary</h3>
+                    </div>
+                  </div>
+                  <div class="card-body">
+                    <div id="img-ai-scene-summary-content">
+                      <p class="muted">Select an image and execute visual analysis to synthesize scene narrative.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Visual Summary -->
+                <div class="card findings-card">
+                  <div class="card-header">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                      <span class="badge badge-emerald badge-xs">Direct Observation</span>
+                      <h3 class="card-title">Visual Summary</h3>
+                    </div>
+                  </div>
+                  <div class="card-body">
+                    <div id="img-visual-summary-content">
+                      <p class="muted">Observable entities and spatial relationship analysis pending.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Actions & Observable Poses Detected -->
+                <div class="card findings-card">
+                  <div class="card-header">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                      <span class="badge badge-amber badge-xs">Posture Analysis</span>
+                      <h3 class="card-title">Actions & Observable Poses</h3>
+                    </div>
+                  </div>
+                  <div class="card-body">
+                    <div id="img-actions-detected-content">
+                      <p class="muted">Posture and geometric orientation analysis pending.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Subtab 2: Evidence Facts -->
+              <div class="image-subtab-panel" id="img-subtab-facts" style="display:none;">
+                <div class="card findings-card">
+                  <div class="card-header">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                      <span class="badge badge-emerald badge-xs">SHA-256 Verified</span>
+                      <h3 class="card-title">Localized Evidence Facts</h3>
+                    </div>
+                    <span class="badge badge-cobalt badge-xs" id="img-facts-count-badge">0 items</span>
+                  </div>
+                  <div class="card-body" style="padding:0.75rem;">
+                    <div class="facts-table-wrapper" id="img-facts-table-container">
+                      <p class="muted" style="padding:1rem;">Localized evidence facts will be cataloged with confidence scores and coordinates.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Raw Models Collapsible / Cards -->
+                <div class="dashboard-columns" style="margin-bottom:0;">
+                  <!-- BLIP Caption -->
+                  <div class="card findings-card" id="finding-blip">
+                    <div class="card-header">
+                      <h3 class="card-title">BLIP Caption</h3>
+                    </div>
+                    <div class="card-body">
+                      <div id="blip-content">
+                        <p class="muted">Pending analysis.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- CLIP Scene Classification -->
+                  <div class="card findings-card" id="finding-clip">
+                    <div class="card-header">
+                      <h3 class="card-title">CLIP Environment</h3>
+                    </div>
+                    <div class="card-body">
+                      <div id="clip-content">
+                        <p class="muted">Pending analysis.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Original RT-DETR container for backwards compatibility -->
+                <div id="finding-rtdetr" style="display:none;">
+                  <div id="rtdetr-content"></div>
+                </div>
+              </div>
+
+              <!-- Subtab 3: Investigative Scenarios -->
+              <div class="image-subtab-panel" id="img-subtab-scenarios" style="display:none;">
+                <div class="card findings-card">
+                  <div class="card-header">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                      <span class="badge badge-amber badge-xs">Hypothesis Only</span>
+                      <h3 class="card-title">AI Application Scenarios</h3>
+                    </div>
+                  </div>
+                  <div class="card-body">
+                    <div id="img-scenarios-content">
+                      <p class="muted">Contextual investigative working hypotheses pending image analysis.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Subtab 4: Ask AI About This Image -->
+              <div class="image-subtab-panel" id="img-subtab-ask-ai" style="display:none;">
+                <div class="card findings-card">
+                  <div class="card-header">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                      <span class="badge badge-cobalt badge-xs">Image Context</span>
+                      <h3 class="card-title">Ask AI About This Image</h3>
+                    </div>
+                    <span class="badge badge-xs badge-emerald" id="img-chat-status">Ready</span>
+                  </div>
+                  <div class="card-body">
+                    <!-- Quick-Prompt Chips -->
+                    <div class="img-chat-chips" id="img-chat-chips">
+                      <button class="chip-btn" data-img-prompt="Summarize the key evidence detected in this image.">
+                        Summarize key evidence
+                      </button>
+                      <button class="chip-btn" data-img-prompt="Are there any persons detected and what are their positions?">
+                        Any persons detected?
+                      </button>
+                      <button class="chip-btn" data-img-prompt="Describe the environmental setting and background context.">
+                        Describe environment
+                      </button>
+                      <button class="chip-btn" data-img-prompt="Are there any weapons, contraband, or hazardous objects detected?">
+                        Potential risks / weapons?
+                      </button>
+                      <button class="chip-btn" data-img-prompt="What spatial relationships exist between the vehicles and persons?">
+                        Spatial relationships
+                      </button>
+                    </div>
+
+                    <!-- Conversation / Response Box -->
+                    <div class="img-chat-response-area" id="img-chat-response-area">
+                      <div class="img-chat-placeholder" id="img-chat-placeholder">
+                        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5">
+                          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                        </svg>
+                        <p>Ask any investigative question about this image. Inquiries are strictly grounded in this artifact's detection facts and custody data.</p>
+                      </div>
+                    </div>
+
+                    <!-- Input Form -->
+                    <form class="img-chat-input-row" id="img-chat-form" onsubmit="return false;">
+                      <input
+                        class="form-input"
+                        id="img-chat-input"
+                        type="text"
+                        placeholder="Ask about detected objects, scene details, positions…"
+                        maxlength="1000"
+                      />
+                      <button class="btn btn-primary btn-sm" id="btn-img-chat-send" type="submit">
+                        <span id="img-chat-send-text">
+                          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="22" y1="2" x2="11" y2="13" />
+                            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                          </svg>
+                        </span>
+                        <span id="img-chat-send-spinner" class="spin-loader" style="display:none;"></span>
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════════════
+           VIEW 4: AUDIO ANALYSIS (Whisper Neural Transcription)
+      ══════════════════════════════════════════════════════════════════════ -->
+      <section class="feature-view" id="view-audio" style="display:none;">
+        <div class="view-header">
+          <div>
+            <h1 class="view-title">Acoustic Audio Intelligence</h1>
+            <p class="view-subtitle">OpenAI Whisper speech transcription, spectral metrics, and interactive timestamped playback seeking.</p>
+          </div>
+          <div class="view-actions">
+            <div class="evidence-modality-selector-group">
+              <label for="select-audio-evidence" class="input-inline-label">Select Audio:</label>
+              <select id="select-audio-evidence" class="form-input form-input-sm evidence-modality-select">
+                <option value="">No audio available</option>
+              </select>
+            </div>
+            <span class="badge badge-cobalt badge-sm" id="audio-status-badge">Ready</span>
+            <button class="btn btn-primary btn-sm" id="btn-run-audio-analysis">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                <line x1="12" y1="19" x2="12" y2="23" />
+              </svg>
+              <span>Run Audio Transcription</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="tab-panel" id="panel-audio" role="tabpanel">
+          <!-- Compact Audio Player Card -->
+          <div class="card media-card audio-player-compact-card" style="margin-bottom: 1.25rem;">
+            <div class="card-header media-header" style="padding: 0.75rem 1.1rem;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" class="text-cyan">
+                  <path d="M9 18V5l12-2v13"></path>
+                  <circle cx="6" cy="18" r="3"></circle>
+                  <circle cx="18" cy="16" r="3"></circle>
+                </svg>
+                <span class="media-title" id="audio-filename-display">No Audio Selected</span>
+              </div>
+              <span class="badge badge-emerald badge-xs" id="whisper-lang-badge" style="display:none;">EN</span>
+            </div>
+            <div class="card-body" style="padding: 0.85rem 1.1rem;">
+              <div class="audio-player-wrapper">
+                <audio id="evidence-audio" controls class="evidence-audio" style="width: 100%; display:none;"></audio>
+                <div class="empty-media-placeholder" id="audio-empty-placeholder" style="padding: 1.25rem 0;">
+                  <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                    <line x1="12" y1="19" x2="12" y2="23" />
+                  </svg>
+                  <p style="margin-top: 6px;">Select an audio recording from the Evidence Library to inspect waveform and run transcription.</p>
+                </div>
+              </div>
+
+              <!-- Compact Audio Metrics Strip -->
+              <div class="audio-metrics-grid" id="audio-metrics-panel" style="display:none; margin-top: 0.75rem;">
+                <div class="mini-stat">
+                  <span class="mini-stat-label">Duration</span>
+                  <span class="mini-stat-val" id="audio-stat-duration">—</span>
+                </div>
+                <div class="mini-stat">
+                  <span class="mini-stat-label">Sampling Rate</span>
+                  <span class="mini-stat-val" id="audio-stat-sr">—</span>
+                </div>
+                <div class="mini-stat">
+                  <span class="mini-stat-label">Channels</span>
+                  <span class="mini-stat-val" id="audio-stat-channels">1 (Mono)</span>
+                </div>
+                <div class="mini-stat">
+                  <span class="mini-stat-label">Speech Status</span>
+                  <span class="mini-stat-val" id="audio-stat-status">Ready</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Audio Subtabs Navigation (Styled exactly like Image Vision) -->
+          <div class="audio-subtabs-nav" role="tablist" style="margin-bottom: 1.25rem;">
+            <button class="audio-subtab-btn active" data-subtab="summary" role="tab" aria-selected="true">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+              <span>Summary & Intelligence</span>
+            </button>
+            <button class="audio-subtab-btn" data-subtab="transcript" role="tab" aria-selected="false">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+              </svg>
+              <span>Transcript</span>
+            </button>
+            <button class="audio-subtab-btn" data-subtab="timeline" role="tab" aria-selected="false">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+              </svg>
+              <span>Event Timeline</span>
+            </button>
+            <button class="audio-subtab-btn" data-subtab="translations" role="tab" aria-selected="false">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+              </svg>
+              <span>Translations</span>
+            </button>
+            <button class="audio-subtab-btn" data-subtab="details" role="tab" aria-selected="false">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              </svg>
+              <span>Evidence Details</span>
+            </button>
+            <button class="audio-subtab-btn" data-subtab="ask-ai" role="tab" aria-selected="false">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+              <span>Ask AI</span>
+            </button>
+          </div>
+
+          <!-- ════ Tab 1: Summary & Intelligence ════ -->
+          <div class="audio-subtab-panel active" id="audio-subtab-summary">
+            <!-- AI Audio Summary Card -->
+            <div class="card findings-card">
+              <div class="card-header">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span class="badge badge-emerald badge-xs">Grounded Synthesis</span>
+                  <h3 class="card-title">AI Executive Statement Summary</h3>
+                </div>
+                <span class="badge badge-xs badge-slate" id="audio-intel-badge">Pending</span>
+              </div>
+              <div class="card-body">
+                <div id="audio-ai-summary-content" class="intel-content-box">
+                  <p class="muted">Transcribe audio to synthesize executive witness statement summary.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Two-column: Event Type & Extracted Location -->
+            <div class="dashboard-columns" style="margin-bottom:0; gap:1rem;">
+              <div class="card findings-card">
+                <div class="card-header">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="badge badge-amber badge-xs">Classification</span>
+                    <h3 class="card-title">Reported Event Type</h3>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <span class="badge badge-slate badge-sm" id="audio-event-type-badge">Undetermined</span>
+                  <p class="muted" id="audio-event-type-detail" style="font-size:11.5px; margin-top:8px;">Pending audio transcription.</p>
+                </div>
+              </div>
+
+              <div class="card findings-card">
+                <div class="card-header">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="badge badge-cobalt badge-xs">Entity Extraction</span>
+                    <h3 class="card-title">Extracted Location Mention</h3>
+                  </div>
+                </div>
+                <div class="card-body">
+                  <p id="audio-location-text" style="font-weight:600; color:var(--text-primary); font-size:13px;">Not specified</p>
+                  <span class="muted" style="font-size:11px; margin-top:4px; display:block;">Derived directly from transcript mention</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Important Entities & Evidence Facts -->
+            <div class="card findings-card">
+              <div class="card-header">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span class="badge badge-cyan badge-xs">Forensic Observations</span>
+                  <h3 class="card-title">Entities & Observed Facts</h3>
+                </div>
+              </div>
+              <div class="card-body">
+                <div id="audio-entities-content">
+                  <p class="muted">Entities mentioned (vehicles, persons, clothing, times) will be extracted from spoken statements.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Relevant Warnings & Uncertainty -->
+            <div class="card findings-card">
+              <div class="card-header">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span class="badge badge-crimson badge-xs">Legal Disclaimer</span>
+                  <h3 class="card-title">Evidentiary Limitations & Uncertainty Notice</h3>
+                </div>
+              </div>
+              <div class="card-body" style="font-size:12px; color:var(--text-secondary); line-height:1.6;">
+                <p>Automated speech recognition and NLP entity extraction reflect <strong>witness allegations and subjective recollection</strong>. Audio acoustic transcription does NOT establish speaker identity, verify the veracity of spoken claims, or constitute certified proof of occurrence without independent physical corroboration.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- ════ Tab 2: Transcript ════ -->
+          <div class="audio-subtab-panel" id="audio-subtab-transcript" style="display:none;">
+            <!-- Full Transcript Card -->
+            <div class="card findings-card" id="finding-whisper">
+              <div class="card-header">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span class="badge badge-cobalt badge-xs">Whisper Live</span>
+                  <h3 class="card-title">Full Speech Transcript</h3>
+                </div>
+              </div>
+              <div class="card-body">
+                <div id="whisper-content">
+                  <p class="muted">Select an audio recording and execute transcription to inspect spoken statements.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Interactive Timestamped Segments list -->
+            <div class="card findings-card">
+              <div class="card-header">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span class="badge badge-emerald badge-xs">Timestamped Audio</span>
+                  <h3 class="card-title">Transcript Segments (Click to Seek Playback)</h3>
+                </div>
+                <span class="badge badge-slate badge-xs" id="audio-segment-count-badge" style="display:none;">0 segments</span>
+              </div>
+              <div class="card-body">
+                <div class="segments-card" id="audio-transcript-container" style="display:none;">
+                  <div id="audio-segments-list" class="segments-list"></div>
+                </div>
+                <div id="audio-segments-placeholder">
+                  <p class="muted">Timestamped segment intervals will appear after transcription.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ════ Tab 3: Event Timeline ════ -->
+          <div class="audio-subtab-panel" id="audio-subtab-timeline" style="display:none;">
+            <div class="card findings-card" id="audio-timeline-card">
+              <div class="card-header">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span class="badge badge-cyan badge-xs">Chronological Order</span>
+                  <h3 class="card-title">Chronological Crime Event Timeline</h3>
+                </div>
+                <span class="badge badge-emerald badge-xs" id="audio-timeline-count-badge">0 events</span>
+              </div>
+              <div class="card-body" style="padding: 1rem;">
+                <div class="timeline-table-wrapper" id="audio-timeline-container">
+                  <p class="muted" style="padding:1rem;">Chronological events extracted from audio transcript will appear here. Click any timestamp to seek playback.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ════ Tab 4: Translations ════ -->
+          <div class="audio-subtab-panel" id="audio-subtab-translations" style="display:none;">
+            <div class="card findings-card">
+              <div class="card-header">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span class="badge badge-cobalt badge-xs">Multilingual NLP</span>
+                  <h3 class="card-title">Multilingual Translations Suite</h3>
+                </div>
+                <span class="badge badge-xs badge-cyan" id="audio-active-lang-badge">ORIGINAL</span>
+              </div>
+              <div class="card-body" style="display:flex; flex-direction:column; gap:0.85rem;">
+                <!-- Language selector sub-tabs -->
+                <div class="audio-lang-tabs" role="tablist">
+                  <button class="audio-lang-tab-btn active" data-lang="original">Original</button>
+                  <button class="audio-lang-tab-btn" data-lang="en">English</button>
+                  <button class="audio-lang-tab-btn" data-lang="hi">Hindi (हिन्दी)</button>
+                  <button class="audio-lang-tab-btn" data-lang="te">Telugu (తెలుగు)</button>
+                  <button class="audio-lang-tab-btn" data-lang="fr">French (Français)</button>
+                </div>
+                <div class="translation-display-box" id="audio-translation-display">
+                  <p class="muted">Translations into English, Hindi, Telugu, and French will appear after transcription.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ════ Tab 5: Evidence Details ════ -->
+          <div class="audio-subtab-panel" id="audio-subtab-details" style="display:none;">
+            <div class="card findings-card">
+              <div class="card-header">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span class="badge badge-emerald badge-xs">Chain of Custody</span>
+                  <h3 class="card-title">Cryptographic Integrity & Forensic Custody</h3>
+                </div>
+                <span class="badge badge-xs badge-emerald">SHA-256 Verified</span>
+              </div>
+              <div class="card-body" style="padding: 1rem; font-size: 12px;">
+                <div class="detail-row">
+                  <span class="detail-key">Evidence ID</span>
+                  <span class="detail-val"><code id="audio-custody-eid">—</code></span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-key">Case ID</span>
+                  <span class="detail-val"><code id="audio-custody-case">—</code></span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-key">Original Filename</span>
+                  <span class="detail-val" id="audio-custody-filename">—</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-key">SHA-256 Digest</span>
+                  <span class="detail-val"><code id="audio-custody-hash" style="font-size:11px;">—</code></span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-key">MIME / Codec</span>
+                  <span class="detail-val" id="audio-detail-format">—</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-key">File Size</span>
+                  <span class="detail-val" id="audio-detail-filesize">—</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-key">Ingestion Timestamp</span>
+                  <span class="detail-val" id="audio-detail-uploaded">—</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-key">Transcription Engine</span>
+                  <span class="detail-val">OpenAI Whisper Base (16 kHz Resampled Mono)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ════ Tab 6: Ask AI ════ -->
+          <div class="audio-subtab-panel" id="audio-subtab-ask-ai" style="display:none;">
+            <div class="card findings-card" id="audio-chat-card">
+              <div class="card-header">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span class="badge badge-cobalt badge-xs">Audio Context</span>
+                  <h3 class="card-title">Ask AI About This Audio</h3>
+                </div>
+                <span class="badge badge-xs badge-emerald" id="audio-chat-status">Ready</span>
+              </div>
+              <div class="card-body">
+                <!-- Quick-Prompt Chips -->
+                <div class="img-chat-chips" id="audio-chat-chips">
+                  <button class="chip-btn" data-audio-prompt="Summarize the speaker's statement and main reported event.">
+                    Summarize statement
+                  </button>
+                  <button class="chip-btn" data-audio-prompt="What vehicles, motorcycles, or persons are mentioned?">
+                    Vehicles & persons
+                  </button>
+                  <button class="chip-btn" data-audio-prompt="What location or address did the witness mention?">
+                    Mentioned location
+                  </button>
+                  <button class="chip-btn" data-audio-prompt="What time of day or specific hour was reported?">
+                    Time of occurrence
+                  </button>
+                  <button class="chip-btn" data-audio-prompt="Are there any weapons or suspicious actions reported?">
+                    Weapons / actions?
+                  </button>
+                </div>
+
+                <!-- Chat message area -->
+                <div class="img-chat-response-area" id="audio-chat-response-area" style="min-height: 180px; max-height: 380px;">
+                  <div class="img-chat-placeholder" id="audio-chat-placeholder">
+                    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                      <line x1="12" y1="19" x2="12" y2="23" />
+                    </svg>
+                    <p>Ask questions about this audio statement. Responses are strictly grounded in the verified transcript and forensic timeline.</p>
+                  </div>
+                </div>
+
+                <!-- Input form -->
+                <form class="img-chat-input-row" id="audio-chat-form" onsubmit="return false;">
+                  <input
+                    class="form-input"
+                    id="audio-chat-input"
+                    type="text"
+                    placeholder="Ask about spoken statements, times, entities, locations…"
+                    maxlength="1000"
+                  />
+                  <button class="btn btn-primary btn-sm" id="btn-audio-chat-send" type="submit">
+                    <span id="audio-chat-send-text">
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="22" y1="2" x2="11" y2="13" />
+                        <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                      </svg>
+                    </span>
+                    <span id="audio-chat-send-spinner" class="spin-loader" style="display:none;"></span>
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════════════
+           VIEW 5: VIDEO ANALYSIS (Frame Sampling & RT-DETR)
+      ══════════════════════════════════════════════════════════════════════ -->
+      <section class="feature-view" id="view-video" style="display:none;">
+        <!-- Compact Toolbar above the Video Player -->
+        <div class="view-header video-toolbar">
+          <div class="video-toolbar-title-group">
+            <h1 class="view-title">Temporal Video Analytics</h1>
+          </div>
+          <div class="view-actions video-toolbar-actions">
+            <div class="evidence-modality-selector-group">
+              <label for="select-video-evidence" class="input-inline-label">Select Video:</label>
+              <select id="select-video-evidence" class="form-input form-input-sm evidence-modality-select">
+                <option value="">No video available</option>
+              </select>
+            </div>
+            <div class="input-inline-group">
+              <label for="video-sample-interval" class="input-inline-label">Interval:</label>
+              <input type="number" id="video-sample-interval" value="1.0" min="0.25" max="10.0" step="0.25" class="form-input form-input-xs" style="width: 52px;" />
+              <span class="input-inline-unit">sec</span>
+            </div>
+            <span class="badge badge-cobalt badge-sm" id="video-status-badge">Ready</span>
+            <button class="btn btn-primary btn-sm" id="btn-run-video-analysis">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="23 7 16 12 23 17 23 7" />
+                <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+              </svg>
+              <span>Run Video Analysis</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="tab-panel" id="panel-video" role="tabpanel">
+          <!-- ════ 1. MAXIMIZED VIDEO PLAYER (Dominates Upper Area) ════ -->
+          <div class="video-player-section">
+            <div class="card media-card video-player-card">
+              <div class="card-header media-header">
+                <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
+                  <span class="media-title" id="video-filename-display">Surveillance Player</span>
+                  <span class="badge badge-emerald badge-xs" id="video-count-badge" style="display:none;">0 objects</span>
+                </div>
+                <button class="btn btn-secondary btn-xs" id="btn-video-fullscreen" title="Toggle Fullscreen Video Overlay" type="button" style="padding: 4px 8px;">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+                  </svg>
+                  <span>Fullscreen</span>
+                </button>
+              </div>
+              <div class="media-canvas-wrapper video-canvas-wrapper" id="video-canvas-container">
+                <div class="video-stage-box" id="video-stage-box" style="display:none;">
+                  <video id="evidence-video" controls class="evidence-video" playsinline></video>
+                  <canvas id="video-bbox-canvas" class="video-bbox-canvas"></canvas>
+                </div>
+                <div class="empty-media-placeholder" id="video-empty-placeholder">
+                  <svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <polygon points="23 7 16 12 23 17 23 7" />
+                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                  </svg>
+                  <p>Select a video file from the Evidence Library to sample frames and detect temporal entities.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ════ 2. THREE-TAB NAVIGATION STRIP ════ -->
+          <div class="video-tabs-bar" role="tablist">
+            <button class="video-tab-btn active" data-vid-tab="intel" role="tab" aria-selected="true">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+              </svg>
+              <span>Multi-Frame AI Scene Intelligence</span>
+            </button>
+            <button class="video-tab-btn" data-vid-tab="summary" role="tab" aria-selected="false">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+              <span>AI Visual Summary</span>
+            </button>
+            <button class="video-tab-btn" data-vid-tab="timeline" role="tab" aria-selected="false">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+              <span>Event Timeline</span>
+            </button>
+          </div>
+
+          <!-- ════ 3. TAB 1: MULTI-FRAME AI SCENE INTELLIGENCE ════ -->
+          <div class="video-tab-panel" id="video-tab-panel-intel" role="tabpanel">
+            <div class="card findings-card video-scene-intel-card" id="video-scene-intel-card">
+              <div class="card-header">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span class="badge badge-cyan badge-xs">Multi-Frame AI</span>
+                  <h3 class="card-title">Multi-Frame AI Scene Intelligence</h3>
+                </div>
+                <span class="badge badge-cobalt badge-xs" id="video-scene-type-badge">Awaiting Analysis</span>
+              </div>
+              <div class="card-body video-scene-intel-body">
+                <div id="video-scene-intel-content" style="display:none;">
+                  <div class="video-intel-grid">
+                    <!-- Left Column: Scene Overview & Action Dynamics -->
+                    <div class="video-intel-col">
+                      <!-- Scene Overview & Environment -->
+                      <div class="intel-section">
+                        <div class="intel-section-title">
+                          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                          <span>Scene Overview & Environment</span>
+                        </div>
+                        <div class="video-scene-box" id="video-scene-type-box">
+                          <div class="scene-type-header">
+                            <strong class="scene-type-name" id="video-scene-name">Undetermined</strong>
+                            <span class="badge badge-emerald badge-xs" id="video-scene-conf">0%</span>
+                          </div>
+                          <p class="scene-type-basis muted" id="video-scene-basis">Awaiting video analysis.</p>
+                        </div>
+                        <div id="video-content" style="margin-top: 6px;"></div>
+                      </div>
+
+                      <!-- Observable Actions & Movements -->
+                      <div class="intel-section" style="margin-top: 10px;">
+                        <div class="intel-section-title">
+                          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                          <span>Observed Actions & Movements</span>
+                        </div>
+                        <ul class="video-actions-list" id="video-observable-actions-list"></ul>
+                      </div>
+                    </div>
+
+                    <!-- Right Column: Entity Population & Detections -->
+                    <div class="video-intel-col">
+                      <!-- Population Metrics (Person & Vehicle Counts) -->
+                      <div class="intel-section">
+                        <div class="video-metrics-split">
+                          <!-- People Metric -->
+                          <div class="video-metric-group">
+                            <div class="video-metric-group-title">
+                              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                              <span>Person Counts</span>
+                            </div>
+                            <div class="video-metric-grid" id="video-people-count-box">
+                              <div class="video-metric-cell">
+                                <span class="metric-val" id="video-people-peak">0</span>
+                                <span class="metric-lbl">Peak/Frame</span>
+                              </div>
+                              <div class="video-metric-cell">
+                                <span class="metric-val" id="video-people-total">0</span>
+                                <span class="metric-lbl">Total</span>
+                              </div>
+                              <div class="video-metric-cell">
+                                <span class="metric-val" id="video-people-avg">0.0</span>
+                                <span class="metric-lbl">Avg/Frame</span>
+                              </div>
+                            </div>
+                            <p class="muted video-metric-note" id="video-people-summary">0 people detected across analyzed frames.</p>
+                          </div>
+
+                          <!-- Vehicle Metric -->
+                          <div class="video-metric-group">
+                            <div class="video-metric-group-title">
+                              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+                              <span>Vehicle Counts</span>
+                            </div>
+                            <div class="video-metric-grid" id="video-vehicle-count-box">
+                              <div class="video-metric-cell">
+                                <span class="metric-val" id="video-vehicles-peak">0</span>
+                                <span class="metric-lbl">Peak/Frame</span>
+                              </div>
+                              <div class="video-metric-cell">
+                                <span class="metric-val" id="video-vehicles-total">0</span>
+                                <span class="metric-lbl">Total</span>
+                              </div>
+                              <div class="video-metric-cell">
+                                <span class="metric-val" id="video-vehicles-avg">0.0</span>
+                                <span class="metric-lbl">Avg/Frame</span>
+                              </div>
+                            </div>
+                            <p class="muted video-metric-note" id="video-vehicles-summary">0 vehicles detected across analyzed frames.</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- Objects Detected Categories -->
+                      <div class="intel-section" style="margin-top: 10px;">
+                        <div class="intel-section-title">
+                          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                          <span>Detected Object Categories & Counts</span>
+                          <span class="badge badge-slate badge-xs" id="video-intel-objects-count">0 items</span>
+                        </div>
+                        <div class="video-chip-container" id="video-objects-detected-container"></div>
+                      </div>
+
+                      <!-- Relevant Frame-Level Summaries -->
+                      <div class="intel-section" style="margin-top: 10px;">
+                        <div class="intel-section-title">
+                          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                          <span>Sampled Keyframe Observations</span>
+                        </div>
+                        <div class="video-frame-summaries-list" id="video-frame-summaries-list"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Placeholder when pending -->
+                <div class="empty-media-placeholder" id="video-scene-intel-placeholder" style="padding: 2.5rem 1rem;">
+                  <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="16" x2="12" y2="12"/>
+                    <line x1="12" y1="8" x2="12.01" y2="8"/>
+                  </svg>
+                  <p style="font-size: 13px;">Run Video Analysis to extract multi-frame scene intelligence, people & vehicle counts, and observable movements.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ════ 4. TAB 2: AI VISUAL SUMMARY ════ -->
+          <div class="video-tab-panel" id="video-tab-panel-summary" role="tabpanel" style="display:none;">
+            <div class="card findings-card video-visual-summary-card" id="video-visual-summary-card">
+              <div class="card-header">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span class="badge badge-cobalt badge-xs">Grounded Synthesis</span>
+                  <h3 class="card-title">AI Visual Summary</h3>
+                </div>
+                <span class="badge badge-emerald badge-xs" id="video-summary-status">Routine Activity</span>
+              </div>
+              <div class="card-body">
+                <div id="video-summary-content" style="display:none;">
+                  <!-- Narrative Summary -->
+                  <div class="video-summary-narrative-box">
+                    <p id="video-summary-narrative" class="video-summary-narrative-text"></p>
+                  </div>
+
+                  <div class="video-intel-grid">
+                    <!-- Left: Direct Visual Observations -->
+                    <div class="summary-section">
+                      <div class="summary-section-label">
+                        <span class="badge badge-emerald badge-xs">Direct Visual Observations</span>
+                        <span class="muted" style="font-size:11px;">Verified frame facts</span>
+                      </div>
+                      <ul class="video-obs-list" id="video-direct-observations-list"></ul>
+                    </div>
+
+                    <!-- Right: AI Interpretations & Analytical Findings -->
+                    <div class="summary-section">
+                      <div class="summary-section-label">
+                        <span class="badge badge-purple badge-xs">AI Interpretations</span>
+                        <span class="muted" style="font-size:11px;">Analytical reasoning</span>
+                      </div>
+                      <ul class="video-interp-list" id="video-ai-interpretations-list"></ul>
+
+                      <!-- Forensic Disclosures / Limitations -->
+                      <div style="margin-top: 14px;">
+                        <div class="summary-section-label">
+                          <span class="badge badge-amber badge-xs">Uncertainties & Limitations</span>
+                          <span class="muted" style="font-size:11px;">Forensic disclosures</span>
+                        </div>
+                        <div class="video-uncertainty-box" id="video-uncertainty-details"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Placeholder -->
+                <div class="empty-media-placeholder" id="video-summary-placeholder" style="padding: 2.5rem 1rem;">
+                  <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                  </svg>
+                  <p style="font-size: 13px;">Visual summary and forensic reasoning will appear here after running analysis.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ════ 5. TAB 3: EVENT TIMELINE ════ -->
+          <div class="video-tab-panel" id="video-tab-panel-timeline" role="tabpanel" style="display:none;">
+            <div class="card findings-card video-event-timeline-card" id="video-event-timeline-card">
+              <div class="card-header">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span class="badge badge-cyan badge-xs">Chronological Order</span>
+                  <h3 class="card-title">Event Timeline</h3>
+                </div>
+                <span class="badge badge-slate badge-xs" id="video-timeline-count-badge">0 frames</span>
+              </div>
+              <div class="card-body">
+                <div id="video-timeline-container" style="display:none;">
+                  <div class="timeline-quick-notice">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                    <span>Click any timestamp to seek the video player directly to that keyframe and display detection bounding boxes.</span>
+                  </div>
+                  <div class="video-event-timeline-list frames-list" id="video-frames-list"></div>
+                </div>
+
+                <!-- Placeholder -->
+                <div class="empty-media-placeholder" id="video-timeline-placeholder" style="padding: 2.5rem 1rem;">
+                  <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                  <p style="font-size: 13px;">Sampled temporal frames and timestamped event descriptions will appear here.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════════════
+           VIEW 6: MULTIMODAL EVIDENCE FUSION
+      ══════════════════════════════════════════════════════════════════════ -->
+      <section class="feature-view" id="view-fusion" style="display:none;">
+        <div class="view-header">
+          <div>
+            <h1 class="view-title">Multimodal Evidence Fusion</h1>
+            <p class="view-subtitle">Cross-modal entity correlation, timeline alignment, contradiction flagging, and investigative gap identification.</p>
+          </div>
+          <div class="view-actions">
+            <span class="badge badge-cobalt badge-sm" id="fusion-status-badge">Ready</span>
+            <button class="btn btn-primary btn-sm" id="btn-run-fusion">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="18" cy="18" r="3" />
+                <circle cx="6" cy="6" r="3" />
+                <path d="M13 6h3a2 2 0 0 1 2 2v7" />
+                <line x1="6" y1="9" x2="6" y2="21" />
+              </svg>
+              <span>Synthesize Multimodal Fusion</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="tab-panel" id="panel-fusion" role="tabpanel">
+          <!-- Modality Coverage Cards -->
+          <div class="fusion-coverage-grid">
+            <div class="card coverage-card">
+              <div class="coverage-header">
+                <span class="coverage-title">Modality Coverage</span>
+                <span class="badge badge-cobalt badge-xs" id="fusion-scope-summary">Case Scope</span>
+              </div>
+              <div class="coverage-badges-row" id="fusion-coverage-badges">
+                <span class="badge badge-slate badge-xs" id="cov-img-badge">Image: Pending</span>
+                <span class="badge badge-slate badge-xs" id="cov-aud-badge">Audio: Pending</span>
+                <span class="badge badge-slate badge-xs" id="cov-vid-badge">Video: Pending</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Visual Evidence Relationship Diagram (SVG Node-Link) -->
+          <div class="card fusion-diagram-card">
+            <div class="card-header">
+              <h3 class="card-title">Cross-Modal Evidence Relationship Map</h3>
+              <span class="badge badge-slate badge-xs">Corroborated Multi-Source Links</span>
+            </div>
+            <div class="card-body">
+              <div class="fusion-diagram-wrapper" id="fusion-diagram-container">
+                <svg class="fusion-svg" id="fusion-svg-diagram" viewBox="0 0 800 220" width="100%" height="220">
+                  <!-- Dynamic SVG links rendered in JS -->
+                  <defs>
+                    <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                      <stop offset="0%" stop-color="#00F0FF" stop-opacity="0.8" />
+                      <stop offset="100%" stop-color="#3B82F6" stop-opacity="0.8" />
+                    </linearGradient>
+                  </defs>
+                  <!-- Visual Placeholder Diagram -->
+                  <g class="diagram-nodes">
+                    <rect x="50" y="30" width="140" height="42" rx="6" fill="#0E1626" stroke="#00F0FF" stroke-width="1.5" />
+                    <text x="120" y="56" fill="#F8FAFC" font-size="12" font-family="'Plus Jakarta Sans', sans-serif" text-anchor="middle">Visual Detections</text>
+
+                    <rect x="50" y="90" width="140" height="42" rx="6" fill="#0E1626" stroke="#3B82F6" stroke-width="1.5" />
+                    <text x="120" y="116" fill="#F8FAFC" font-size="12" font-family="'Plus Jakarta Sans', sans-serif" text-anchor="middle">Acoustic Speech</text>
+
+                    <rect x="50" y="150" width="140" height="42" rx="6" fill="#0E1626" stroke="#8B5CF6" stroke-width="1.5" />
+                    <text x="120" y="176" fill="#F8FAFC" font-size="12" font-family="'Plus Jakarta Sans', sans-serif" text-anchor="middle">Temporal Video</text>
+
+                    <!-- Connecting Beziers -->
+                    <path d="M 190 51 C 280 51, 320 111, 400 111" fill="none" stroke="url(#cyanGrad)" stroke-width="2" stroke-dasharray="4,4" />
+                    <path d="M 190 111 C 280 111, 320 111, 400 111" fill="none" stroke="url(#cyanGrad)" stroke-width="2" />
+                    <path d="M 190 171 C 280 171, 320 111, 400 111" fill="none" stroke="url(#cyanGrad)" stroke-width="2" stroke-dasharray="4,4" />
+
+                    <!-- Fusion Center Node -->
+                    <rect x="400" y="85" width="160" height="52" rx="8" fill="#1E293B" stroke="#00F0FF" stroke-width="2" />
+                    <text x="480" y="108" fill="#00F0FF" font-size="11" font-weight="700" font-family="'JetBrains Mono', monospace" text-anchor="middle">FUSION CORE</text>
+                    <text x="480" y="125" fill="#94A3B8" font-size="10" font-family="'Plus Jakarta Sans', sans-serif" text-anchor="middle">Reconciled Truth</text>
+
+                    <!-- Output Paths -->
+                    <path d="M 560 111 L 630 65" fill="none" stroke="#10B981" stroke-width="2" />
+                    <path d="M 560 111 L 630 155" fill="none" stroke="#EF4444" stroke-width="2" />
+
+                    <!-- Corroboration Box -->
+                    <rect x="630" y="44" width="130" height="40" rx="6" fill="#0A2218" stroke="#10B981" stroke-width="1.5" />
+                    <text x="695" y="68" fill="#34D399" font-size="11" font-family="'Plus Jakarta Sans', sans-serif" text-anchor="middle">Corroborated</text>
+
+                    <!-- Discrepancy Box -->
+                    <rect x="630" y="135" width="130" height="40" rx="6" fill="#251216" stroke="#EF4444" stroke-width="1.5" />
+                    <text x="695" y="159" fill="#F87171" font-size="11" font-family="'Plus Jakarta Sans', sans-serif" text-anchor="middle">Contradictions</text>
+                  </g>
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <!-- Fusion Findings 2x2 Grid -->
+          <div class="fusion-findings-grid">
+            <!-- Corroborated Entities -->
+            <div class="card findings-card">
+              <div class="card-header">
+                <h3 class="card-title">Cross-Modal Corroborated Entities</h3>
+                <span class="badge badge-emerald badge-xs" id="fusion-assoc-count" style="display:none;">0 matches</span>
+              </div>
+              <div class="card-body">
+                <div id="fusion-associations-content">
+                  <p class="muted">Click 'Synthesize Multimodal Fusion' to cross-reference entities across image and video evidence.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Temporal Alignments -->
+            <div class="card findings-card">
+              <div class="card-header">
+                <h3 class="card-title">Temporal Audio-Video Alignments</h3>
+                <span class="badge badge-cobalt badge-xs" id="fusion-temporal-count" style="display:none;">0 alignments</span>
+              </div>
+              <div class="card-body">
+                <div id="fusion-temporal-content">
+                  <p class="muted">Temporal speech-to-video associations appear when audio and video artifacts are analyzed.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Inconsistencies & Divergences -->
+            <div class="card findings-card">
+              <div class="card-header">
+                <h3 class="card-title">Inconsistencies & Divergences Flagged</h3>
+                <span class="badge badge-crimson badge-xs" id="fusion-conflict-count" style="display:none;">0 flagged</span>
+              </div>
+              <div class="card-body">
+                <div id="fusion-contradictions-content">
+                  <p class="muted">Contradictory environmental or descriptive observations will be flagged for forensic investigator review.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Investigative Questions -->
+            <div class="card findings-card">
+              <div class="card-header">
+                <h3 class="card-title">Investigative Gaps & Unresolved Questions</h3>
+              </div>
+              <div class="card-body">
+                <div id="fusion-questions-content">
+                  <p class="muted">Evidence gaps and unanalyzed channels will be outlined here.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════════════
+           VIEW 7: 3D SPATIAL SCENE RECONSTRUCTION
+      ══════════════════════════════════════════════════════════════════════ -->
+      <section class="feature-view" id="view-scene3d" style="display:none;">
+        <div class="view-header">
+          <div>
+            <h1 class="view-title">3D Spatial Scene Projection</h1>
+            <p class="view-subtitle">Interactive 3D spatial layout derived from 2D bounding boxes and camera perspectives.</p>
+          </div>
+          <div class="view-actions">
+            <span class="badge badge-amber badge-xs">Illustrative 3D Proxy</span>
+            <button class="btn btn-secondary btn-sm" id="btn-scene3d-reset-cam" title="Reset camera to isometric view">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="2" y1="12" x2="22" y2="12" />
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+              </svg>
+              <span>Reset View</span>
+            </button>
+            <button class="btn btn-secondary btn-sm" id="btn-scene3d-refresh" title="Reload spatial data">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23 4 23 10 17 10" />
+                <polyline points="1 20 1 14 7 14" />
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+              </svg>
+              <span>Refresh 3D</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="tab-panel" id="panel-scene3d" role="tabpanel">
+          <div class="scene3d-container">
+            <!-- 3D Controls Toolbar -->
+            <div class="scene3d-toolbar">
+              <div class="toolbar-group">
+                <label for="scene3d-filter-category" class="toolbar-label">Category:</label>
+                <select id="scene3d-filter-category" class="form-select form-select-xs" style="width: 140px;">
+                  <option value="">All Categories</option>
+                </select>
+              </div>
+
+              <div class="toolbar-group">
+                <label for="scene3d-filter-evidence" class="toolbar-label">Evidence:</label>
+                <select id="scene3d-filter-evidence" class="form-select form-select-xs" style="width: 150px;">
+                  <option value="">All Evidence</option>
+                </select>
+              </div>
+
+              <div class="toolbar-group">
+                <label for="scene3d-conf-slider" class="toolbar-label">Min Conf:</label>
+                <input type="range" id="scene3d-conf-slider" min="0" max="100" value="30" step="5" class="conf-slider" />
+                <span id="scene3d-conf-val" class="font-mono text-xs">30%</span>
+              </div>
+
+              <div class="toolbar-toggles">
+                <button class="btn btn-ghost btn-xs" id="btn-scene3d-toggle-grid">Grid: On</button>
+                <button class="btn btn-ghost btn-xs" id="btn-scene3d-toggle-labels">Labels: On</button>
+              </div>
+
+              <span class="badge badge-cobalt badge-xs" id="scene3d-count-badge" style="margin-left: auto;">0 objects</span>
+            </div>
+
+            <!-- Viewport Canvas Container -->
+            <div class="scene3d-viewport" id="scene3d-viewport">
+              <canvas id="threejs-canvas"></canvas>
+
+              <!-- Floating Legend -->
+              <div class="scene3d-overlay-legend" id="scene3d-legend" style="display:none;">
+                <div class="legend-title">Detected Classes</div>
+                <div id="scene3d-legend-list"></div>
+              </div>
+
+              <!-- Floating Object Details Card -->
+              <div class="scene3d-overlay-details" id="scene3d-details-card" style="display:none;">
+                <div class="details-card-header">
+                  <span class="badge badge-cobalt badge-xs" id="det-card-label">Object</span>
+                  <button class="btn btn-ghost btn-xs" id="btn-close-det-card" aria-label="Close details card">✕</button>
+                </div>
+                <div class="details-card-body">
+                  <div class="detail-line"><strong>Confidence:</strong> <span id="det-card-conf" class="badge badge-emerald badge-xs">94%</span></div>
+                  <div class="detail-line"><strong>Source:</strong> <span id="det-card-evidence" class="muted font-mono">evidence.jpg</span></div>
+                  <div class="detail-line" id="det-card-timestamp-row" style="display:none;"><strong>Timestamp:</strong> <span id="det-card-timestamp" class="muted">04.2s</span></div>
+                  <div class="detail-line"><strong>2D Detection Box:</strong> <span id="det-card-bbox" class="muted font-mono">[100, 150, 300, 450]</span></div>
+                  <div class="detail-line"><strong>Approx. 3D Pos:</strong> <span id="det-card-pos" class="muted font-mono">(x:0, y:0, z:0)</span></div>
+                  <p class="detail-disclaimer">Approximate 3D Spatial Proxy projected from 2D bounding box. Depth coordinates are procedural and illustrative; not calibrated metric sensor truth.</p>
+                </div>
+                <button class="btn btn-primary btn-xs btn-full" id="btn-det-card-navigate" style="margin-top: 8px;">
+                  Inspect Source Evidence
+                </button>
+              </div>
+
+              <!-- Empty State Overlay -->
+              <div class="scene3d-empty-state" id="scene3d-empty-state">
+                <svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                </svg>
+                <p id="scene3d-empty-text">No analyzed image or video evidence in active case.<br />Analyze images or videos to project detections into the 3D scene.</p>
+              </div>
+
+              <!-- Loading Overlay -->
+              <div class="scene3d-loading-overlay" id="scene3d-loading" style="display:none;">
+                <div class="spin-loader"></div>
+                <p>Generating 3D spatial evidence projections…</p>
+              </div>
+
+              <div class="scene3d-hint-dock">
+                Left-click & drag: Rotate camera | Right-click & drag: Pan | Scroll: Zoom | Click node: Inspect object metadata
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════════════
+           VIEW 8: FORENSIC REPORTS & PDF GENERATOR
+      ══════════════════════════════════════════════════════════════════════ -->
+      <section class="feature-view" id="view-reports" style="display:none;">
+        <div class="view-header">
+          <div>
+            <h1 class="view-title">Forensic Reports & PDF Export</h1>
+            <p class="view-subtitle">Generate court-admissible forensic case reports with tamper-evident SHA-256 custody logs.</p>
+          </div>
+          <div class="view-actions">
+            <button class="btn btn-primary btn-sm" id="btn-download-pdf">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              <span>Export Official Forensic PDF</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="reports-layout">
+          <div class="card report-preview-card">
+            <div class="card-header">
+              <h2 class="card-title">Case Report Executive Summary</h2>
+              <span class="badge badge-emerald badge-xs">Court-Admissible Structure</span>
+            </div>
+            <div class="card-body">
+              <div class="report-document-mockup">
+                <div class="report-doc-header">
+                  <div class="report-agency-title">FORENSIC MULTIMODAL INVESTIGATION REPORT</div>
+                  <div class="report-doc-meta" id="report-meta-display">
+                    Case: <span id="report-case-id-display">—</span> | Generated: <span id="report-date-display">Today</span>
+                  </div>
+                </div>
+
+                <div class="report-doc-section">
+                  <h4 class="report-section-heading">1. Case Inventory & Custody Hashes</h4>
+                  <p class="report-text" id="report-evidence-summary">Select an active case to generate report summary.</p>
+                </div>
+
+                <div class="report-doc-section">
+                  <h4 class="report-section-heading">2. Multimodal Analytical Findings</h4>
+                  <p class="report-text" id="report-findings-summary">Combines image RT-DETR object detection, Whisper speech transcripts, and sampled video frames.</p>
+                </div>
+
+                <div class="report-doc-section">
+                  <h4 class="report-section-heading">3. Cross-Modal Fusion & Reconciliation</h4>
+                  <p class="report-text" id="report-fusion-summary">Corroborates observations across visual and acoustic modalities while flagging conflicting observations.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Global Fallback Empty State (hidden by default) -->
+      <div id="empty-state" style="display:none;"></div>
+      <div id="tab-panels" style="display:none;"></div>
+    </main>
+
+    <!-- ── RIGHT DOCKED AI ASSISTANT PANEL ────────────────────────────────── -->
+    <aside class="app-chat-panel" id="ws-chat-panel">
+      <div class="chat-panel-header">
+        <div class="chat-header-main">
+          <div class="chat-title-group">
+            <svg class="chat-header-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="11" width="18" height="10" rx="2" />
+              <circle cx="12" cy="5" r="2" />
+              <path d="M12 7v4" />
+              <line x1="8" y1="16" x2="8.01" y2="16" />
+              <line x1="16" y1="16" x2="16.01" y2="16" />
+            </svg>
+            <h2 class="chat-heading">Forensic AI Assistant</h2>
+          </div>
+          <div class="chat-header-actions">
+            <button class="btn btn-ghost btn-xs" id="btn-clear-chat" title="Clear chat history for this case" disabled>
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+              <span>Clear</span>
+            </button>
+            <button class="btn btn-ghost btn-xs" id="btn-close-assistant" title="Collapse assistant panel">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="chat-meta-row">
+          <span class="badge badge-xs badge-cobalt" id="chat-provider-badge">Gemini 2.5 Flash</span>
+          <span class="badge badge-xs badge-emerald" id="chat-status-badge">Standby</span>
+        </div>
+      </div>
+
+      <!-- Quick Investigation Suggestion Chips -->
+      <div class="chat-suggestions" id="chat-suggestions">
+        <button class="chip-btn" data-query="Summarize all analyzed evidence in this case." disabled>
+          Summarize case evidence
+        </button>
+        <button class="chip-btn" data-query="Are there any weapons or persons identified across video and images?" disabled>
+          Weapons & persons detected
+        </button>
+        <button class="chip-btn" data-query="What speech or audio was transcribed in this case?" disabled>
+          Speech transcriptions
+        </button>
+        <button class="chip-btn" data-query="Are there any cross-modal contradictions or timeline inconsistencies?" disabled>
+          Cross-modal contradictions
+        </button>
+      </div>
+
+      <!-- Chat Messages Scroll Container -->
+      <div class="chat-messages" id="chat-messages" role="log" aria-live="polite">
+        <p class="muted chat-hint" id="chat-empty-hint">
+          Select an active case to ask questions about its evidence. All answers are strictly grounded in verified forensic data.
+        </p>
+      </div>
+
+      <!-- Input Form -->
+      <form class="chat-input-row" id="chat-form" onsubmit="return false;">
+        <input
+          class="form-input chat-input"
+          id="chat-input"
+          type="text"
+          placeholder="Select an active case to begin…"
+          maxlength="1000"
+          disabled
+        />
+        <button class="btn btn-primary btn-sm chat-send-btn" id="btn-chat-send" type="submit" disabled>
+          <span id="chat-send-text">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="22" y1="2" x2="11" y2="13" />
+              <polygon points="22 2 15 22 11 13 2 9 22 2" />
+            </svg>
+          </span>
+          <span id="chat-send-spinner" class="spin-loader" style="display:none;"></span>
+        </button>
+      </form>
+    </aside>
+
+  </div><!-- /app-layout -->
+
+  <!-- ════════════════════════════════════════════════════════════════════════
+       3. MODAL: CREATE INVESTIGATION CASE
+  ══════════════════════════════════════════════════════════════════════════ -->
+  <div class="modal-backdrop" id="modal-new-case" style="display:none;">
+    <div class="modal-dialog" role="dialog" aria-labelledby="modal-case-title">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modal-case-title">Create Investigation Case Container</h3>
+        <button class="btn btn-ghost btn-xs" id="btn-close-case-modal" aria-label="Close modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="new-case-name">Case Title / Identifier <span class="required">*</span></label>
+          <input class="form-input" id="new-case-name" type="text" placeholder="e.g. Incident #2026-CR-8041" maxlength="120" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="new-case-desc">Forensic Description / Case Notes</label>
+          <textarea class="form-input" id="new-case-desc" rows="3" placeholder="Case scope, jurisdiction, and incident circumstances…"></textarea>
+        </div>
+        <p class="form-hint" id="create-case-msg" aria-live="polite"></p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-sm" id="btn-cancel-case-modal">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="btn-create-case">Create Case Container</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden legacy elements preserved for DOM backwards compatibility -->
+  <details id="new-case-details" style="display:none;"></details>
+  <ul id="health-list" style="display:none;"></ul>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container" aria-live="assertive" role="alert"></div>
+
+  <!-- Vendor Scripts -->
+  <script src="{{ url_for('static', filename='js/vendor/three.min.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/vendor/OrbitControls.js') }}"></script>
+  <!-- Workspace Application Logic -->
+  <script src="{{ url_for('static', filename='js/workspace.js') }}"></script>
+</body>
+</html>
