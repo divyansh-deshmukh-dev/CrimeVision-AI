@@ -1277,7 +1277,7 @@ function renderInferenceFailureUI(errorMsg, analysisData) {
           Live object detection could not be computed on this host.
         </p>
         <button class="btn btn-secondary btn-xs btn-restore-sample" id="btn-restore-sample-rtdetr">
-          View Precomputed Sample Baseline (4 objects)
+          View Precomputed Sample Baseline (8 objects)
         </button>
       </div>
     `;
@@ -1299,10 +1299,28 @@ async function restoreSampleBaseline() {
       if (cur) {
         cur.analysis_json = analysisData;
         cur.analysis_status = "completed";
+        if (cur.modality === "audio") {
+          renderAudioAnalysisFindings(analysisData);
+          if (dom.audioStatusBadge) {
+            dom.audioStatusBadge.textContent = "Baseline Restored";
+            dom.audioStatusBadge.className = "badge badge-emerald badge-sm";
+          }
+        } else if (cur.modality === "video") {
+          renderVideoAnalysisFindings(analysisData);
+          if (dom.videoStatusBadge) {
+            dom.videoStatusBadge.textContent = "Baseline Restored";
+            dom.videoStatusBadge.className = "badge badge-emerald badge-sm";
+          }
+        } else {
+          renderImageAnalysisFindings(analysisData);
+          drawBoundingBoxes(analysisData);
+          if (dom.imageStatusBadge) {
+            dom.imageStatusBadge.textContent = "Baseline Restored";
+            dom.imageStatusBadge.className = "badge badge-emerald badge-sm";
+          }
+        }
       }
-      renderImageAnalysisFindings(analysisData);
-      drawBoundingBoxes(analysisData);
-      showToast("Restored precomputed baseline sample detections.", "info");
+      showToast("Restored precomputed baseline sample data.", "info");
     } else {
       showToast((data && data.error) || "Could not restore sample data.", "error");
     }
@@ -2592,9 +2610,12 @@ async function runAudioTranscription() {
         <div style="color:var(--crimson); font-size:12.5px; padding:12px; background:rgba(239,68,68,0.08); border-radius:6px; border:1px solid rgba(239,68,68,0.2);">
           <strong style="display:block; margin-bottom:4px;">Transcription Failed (${escapeHtml(errCategory)}):</strong>
           ${escapeHtml(errDetail)}
-          <div style="margin-top:10px;">
+          <div style="margin-top:10px; display:flex; gap:8px;">
             <button class="btn btn-sm btn-crimson" onclick="runAudioTranscription()" style="font-size:11.5px; padding:4px 10px; cursor:pointer;">
               Retry Audio Transcription
+            </button>
+            <button class="btn btn-sm btn-secondary" onclick="restoreSampleBaseline()" style="font-size:11.5px; padding:4px 10px; cursor:pointer;">
+              Restore Sample Baseline
             </button>
           </div>
         </div>
@@ -3399,9 +3420,12 @@ async function runVideoAnalysis() {
         <div style="color:var(--crimson); font-size:12.5px; padding:12px; background:rgba(239,68,68,0.08); border-radius:6px; border:1px solid rgba(239,68,68,0.2);">
           <strong style="display:block; margin-bottom:4px;">Video Analysis Failed:</strong>
           ${escapeHtml(errDetail)}
-          <div style="margin-top:10px;">
+          <div style="margin-top:10px; display:flex; gap:8px;">
             <button class="btn btn-sm btn-crimson" onclick="runVideoAnalysis()" style="font-size:11.5px; padding:4px 10px; cursor:pointer;">
               Retry Video Analysis
+            </button>
+            <button class="btn btn-sm btn-secondary" onclick="restoreSampleBaseline()" style="font-size:11.5px; padding:4px 10px; cursor:pointer;">
+              Restore Sample Baseline
             </button>
           </div>
         </div>

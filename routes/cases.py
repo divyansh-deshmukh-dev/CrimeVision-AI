@@ -516,13 +516,19 @@ def restore_seeded_sample_endpoint(case_id: str, evidence_id: str):
     if ev is None or ev["case_id"] != case_id:
         return _error(f"Evidence '{evidence_id}' not found.", 404)
 
-    if evidence_id == "ev_b31dacb7da6f":
+    if evidence_id in ("ev_b31dacb7da6f", "ev_b49348be7de2", "ev_9d23b6a675ce"):
+        from storage.database import get_db
+        db = get_db()
+        # Mark as failed to trigger clean restoration in ensure_demo_evaluator
+        db.execute("UPDATE evidence SET analysis_status = 'failed' WHERE evidence_id = ?", (evidence_id,))
+        db.commit()
+
         from storage.provision_demo import ensure_demo_evaluator
         ensure_demo_evaluator()
         updated_ev = get_evidence(evidence_id)
         return jsonify({
             "status": "success",
-            "message": "Restored precomputed baseline sample detections.",
+            "message": f"Restored precomputed baseline sample for evidence '{evidence_id}'.",
             "evidence": updated_ev,
             "analysis": updated_ev.get("analysis_json"),
         }), 200
@@ -642,6 +648,8 @@ def analyze_audio_endpoint(case_id: str, evidence_id: str):
         final_status = audio_pipeline_result.get("status", "completed")
         payload = {
             "status": final_status,
+            "is_seeded_sample": False,
+            "result_source": ResultSource.FRESH_INFERENCE.value,
             "audio": audio_pipeline_result,
             "whisper": audio_pipeline_result,
             "audio_metadata": audio_pipeline_result.get("audio_metadata", {}),
@@ -700,14 +708,19 @@ def analyze_audio_endpoint(case_id: str, evidence_id: str):
             "analysis": error_payload,
             "error": err_msg,
             "error_category": err_cat,
-        }), 500
+        }), 200
 
-    return jsonify({
+    res_payload = {
         "status": updated.get("analysis_status", final_status) if updated else final_status,
         "evidence_id": evidence_id,
         "case_id": case_id,
         "analysis": updated.get("analysis_json") if updated else payload,
-    }), 200
+    }
+    if final_status == "failed":
+        res_payload["error"] = audio_pipeline_result.get("error", "Audio analysis failed.")
+        res_payload["error_category"] = audio_pipeline_result.get("error_category", "TRANSCRIPTION_ERROR")
+
+    return jsonify(res_payload), 200
 
 
 @cases_bp.route(
@@ -919,14 +932,18 @@ def analyze_video_endpoint(case_id: str, evidence_id: str):
             "case_id": case_id,
             "analysis": error_payload,
             "error": str(exc),
-        }), 500
+        }), 200
 
-    return jsonify({
+    res_payload = {
         "status": updated.get("analysis_status", final_status) if updated else final_status,
         "evidence_id": evidence_id,
         "case_id": case_id,
         "analysis": updated.get("analysis_json") if updated else payload,
-    }), 200
+    }
+    if final_status == "failed":
+        res_payload["error"] = video_result.get("error", "Video analysis failed.")
+
+    return jsonify(res_payload), 200
 
 
 # ── Multimodal Fusion endpoint (Phase 6) ────────────────────────────────────

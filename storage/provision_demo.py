@@ -771,6 +771,8 @@ def ensure_demo_evaluator(
     aud_analysis = {
         "status": "completed",
         "is_demo": False,
+        "is_seeded_sample": True,
+        "result_source": "precomputed_demo_result",
         "provenance": "Verified Forensic Baseline (openai/whisper-base)",
         "model": "openai/whisper-base",
         "transcript": "Target vehicle confirmed heading eastbound toward Sector 4 transit hub. Vehicle identified as a white sedan.",
@@ -797,6 +799,25 @@ def ensure_demo_evaluator(
             (aud_ev_id, case_id, aud_key, "ElevenLabs_2026-10-18T17_37_53_Roger - Laid-Back, Casual, Resonant_pre_sp100_s50_sb75_v4.mp3", aud_sz, now_iso, json.dumps(aud_analysis)),
         )
         db.commit()
+    else:
+        aud_dict = dict(aud_row)
+        existing_aj = aud_dict.get("analysis_json")
+        needs_aud_update = False
+        if aud_dict.get("analysis_status") == "failed":
+            needs_aud_update = True
+        elif existing_aj:
+            try:
+                p_aj = json.loads(existing_aj) if isinstance(existing_aj, str) else existing_aj
+                if "is_seeded_sample" not in p_aj:
+                    needs_aud_update = True
+            except Exception:
+                needs_aud_update = True
+        if needs_aud_update:
+            db.execute(
+                "UPDATE evidence SET analysis_json = ?, analysis_status = 'completed' WHERE evidence_id = ?",
+                (json.dumps(aud_analysis), aud_ev_id),
+            )
+            db.commit()
 
     # Evidence 3: Video
     vid_ev_id = "ev_9d23b6a675ce"
@@ -825,6 +846,8 @@ def ensure_demo_evaluator(
     vid_analysis = {
         "status": "completed",
         "is_demo": False,
+        "is_seeded_sample": True,
+        "result_source": "precomputed_demo_result",
         "provenance": "Verified Forensic Baseline (PekingU/rtdetr_r50vd)",
         "model": "PekingU/rtdetr_r50vd",
         "metadata": {"fps": 30.0, "duration_seconds": 15.0, "width": 1920, "height": 1080, "total_frames": 450},
@@ -853,6 +876,25 @@ def ensure_demo_evaluator(
             (vid_ev_id, case_id, vid_key, "Realistic_15-second_continuous_CCTV_surveillance_footage_of_a_small_urban_street.mp4", vid_sz, now_iso, json.dumps(vid_analysis)),
         )
         db.commit()
+    else:
+        vid_dict = dict(vid_row)
+        existing_vj = vid_dict.get("analysis_json")
+        needs_vid_update = False
+        if vid_dict.get("analysis_status") == "failed":
+            needs_vid_update = True
+        elif existing_vj:
+            try:
+                p_vj = json.loads(existing_vj) if isinstance(existing_vj, str) else existing_vj
+                if "is_seeded_sample" not in p_vj:
+                    needs_vid_update = True
+            except Exception:
+                needs_vid_update = True
+        if needs_vid_update:
+            db.execute(
+                "UPDATE evidence SET analysis_json = ?, analysis_status = 'completed' WHERE evidence_id = ?",
+                (json.dumps(vid_analysis), vid_ev_id),
+            )
+            db.commit()
 
     # Report
     rep_id = "rep_4af9ce45c9dd"

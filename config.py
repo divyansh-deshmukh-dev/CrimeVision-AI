@@ -182,6 +182,33 @@ class Config:
         "WHISPER_MODEL_NAME", "openai/whisper-base"
     )
 
+    # ── Inference Engine & Cloud Provider Selection ─────────────────────────
+    # "auto" (default): chooses cloud on low-memory/Render containers or when API keys exist; local on dev machines
+    # "cloud": strictly routes inference to external cloud APIs (Groq Whisper, Gemini Vision)
+    # "local": strictly executes local PyTorch / RT-DETR / local Whisper / OpenCV models
+    INFERENCE_PROVIDER: str = (
+        os.getenv("INFERENCE_PROVIDER")
+        or (
+            "cloud"
+            if os.getenv("AI_PROVIDER", "").strip().lower() in ("cloud", "remote", "api")
+            else "auto"
+        )
+    ).lower()
+    GROQ_WHISPER_MODEL: str = (
+        os.getenv("GROQ_WHISPER_MODEL")
+        or (
+            os.getenv("WHISPER_MODEL_NAME")
+            if os.getenv("WHISPER_MODEL_NAME", "").strip().startswith("whisper-")
+            else None
+        )
+        or "whisper-large-v3-turbo"
+    )
+    GEMINI_VISION_MODEL: str = (
+        os.getenv("GEMINI_VISION_MODEL")
+        or os.getenv("GEMINI_MODEL")
+        or "gemini-2.0-flash"
+    )
+
     # ── Demo / sample case ────────────────────────────────────────────────────
     DEMO_CASE_ID: str = "demo_sample_case"
     DEMO_CASE_LABEL: str = "[DEMO SAMPLE CASE]"

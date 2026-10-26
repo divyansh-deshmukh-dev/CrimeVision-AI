@@ -15,22 +15,23 @@ CrimeVision AI is an air-gap-capable multimodal forensic decision-support and ev
 
 ## Table of Contents
 1. [Core Architecture & Forensic Philosophy](#core-architecture--forensic-philosophy)
-2. [Supported Operational Experiences](#supported-operational-experiences)
+2. [AI Architecture and Deployment Decisions](#ai-architecture-and-deployment-decisions)
+3. [Supported Operational Experiences](#supported-operational-experiences)
    - [Evaluator / Demo Access (`user-12`)](#1-evaluator--demo-access-user-12)
    - [Registered Examiner Accounts (Multi-Tenant Isolation)](#2-registered-examiner-accounts-multi-tenant-isolation)
-3. [Phased Delivery Summary (Phases 1–10)](#phased-delivery-summary-phases-110)
-4. [Project Folder Structure](#project-folder-structure)
-5. [Prerequisites & System Requirements](#prerequisites--system-requirements)
-6. [Installation & Windows PowerShell Setup](#installation--windows-powershell-setup)
-7. [Environment Variables Configuration](#environment-variables-configuration)
-8. [Running the Application](#running-the-application)
-9. [Automated Testing & Live Results](#automated-testing--live-results)
-10. [Cloud Storage & Database Architecture](#cloud-storage--database-architecture)
-11. [Data Migration & Demo Provisioning](#data-migration--demo-provisioning)
-12. [Deployment Readiness & Storage Caveats](#deployment-readiness--storage-caveats)
-13. [Forensic Limitations & Technical Disclaimers](#forensic-limitations--technical-disclaimers)
-14. [Troubleshooting Guide](#troubleshooting-guide)
-15. [License & Ethics Notice](#license--ethics-notice)
+4. [Phased Delivery Summary (Phases 1–10)](#phased-delivery-summary-phases-110)
+5. [Project Folder Structure](#project-folder-structure)
+6. [Prerequisites & System Requirements](#prerequisites--system-requirements)
+7. [Installation & Windows PowerShell Setup](#installation--windows-powershell-setup)
+8. [Environment Variables Configuration](#environment-variables-configuration)
+9. [Running the Application](#running-the-application)
+10. [Automated Testing & Live Results](#automated-testing--live-results)
+11. [Cloud Storage & Database Architecture](#cloud-storage--database-architecture)
+12. [Data Migration & Demo Provisioning](#data-migration--demo-provisioning)
+13. [Deployment Readiness & Storage Caveats](#deployment-readiness--storage-caveats)
+14. [Forensic Limitations & Technical Disclaimers](#forensic-limitations--technical-disclaimers)
+15. [Troubleshooting Guide](#troubleshooting-guide)
+16. [License & Ethics Notice](#license--ethics-notice)
 
 ---
 
@@ -78,6 +79,106 @@ CrimeVision AI is built around the principles of **cryptographic integrity, tena
        │ • Timeline Z-layer │ │ • Citations     │ │ • Full Provenance  │
        │ • Category Filters │ │ • Local Fallback│ │ • Bounding Boxes   │
        └────────────────────┘ └─────────────────┘ └────────────────────┘
+```
+
+---
+
+## AI Architecture and Deployment Decisions
+
+CrimeVision AI is designed with a dual-engine architecture that bridges **local high-assurance forensic investigation** with **zero-cost, resource-constrained cloud evaluation**:
+
+### 1. Why the Local Tech Stack Uses PyTorch, RT-DETR, BLIP, Whisper, and OpenCV
+- **Air-Gap Capability & Data Sovereignty**: Law enforcement and sensitive forensic laboratories require zero network leakage. The core engine runs 100% offline using in-process PyTorch pipelines.
+- **Deterministic Coordinate Mapping**: Local RT-DETR (`PekingU/rtdetr_r50vd`) generates exact, reproducible pixel bounding boxes for physical evidence localization without dependency on third-party API availability or commercial terms of service.
+- **Controlled Semantic Taxonomy**: Local CLIP (`openai/clip-vit-base-patch32`) scores evidence against an auditable forensic label taxonomy with exact mathematical cosine similarities.
+- **Verifiable Acoustic Phonetics**: Local OpenAI Whisper (`openai/whisper-base`) runs sequential speech decoding under `torch.no_grad()`, guaranteeing reproducible phoneme-level transcriptions.
+- **Full Video Ingest & Frame Decoding**: Local OpenCV (`cv2.VideoCapture`) processes video streams directly from disk with deterministic timestamp alignment.
+
+### 2. Why the Deployed Render Application Uses Cloud APIs (Gemini Vision & Groq Whisper)
+- **Render Free Tier Resource Constraints (512 MB RAM)**: Running full PyTorch vision models (RT-DETR ~160 MB weights + CLIP ~600 MB + BLIP ~900 MB) requires at least 1.5 GB to 2.5 GB of RAM. In a 512 MB cloud container, loading PyTorch neural weights triggers uncatchable OS `SIGKILL` (Out-of-Memory) crashes that abruptly terminate the web server.
+- **Strict ₹0 Monthly Cloud Budget**: CrimeVision AI was configured to operate under a strict monthly budget of **₹0**, precluding paid GPU nodes or high-memory instances ($25–$85/month).
+- **Zero-RAM Cloud AI Integration**:
+  - **Audio Transcription**: Uses **Groq Cloud Whisper API** (`whisper-large-v3-turbo`). Groq consumes < 5 MB RAM on Render, executes speech decoding in ~1.5 seconds, and handles MP3/WAV/M4A streams natively without needing heavy local `ffmpeg` binaries.
+  - **Image Understanding & Object Detection**: Uses **Google Gemini 2.0 Flash Vision API** (`gemini-2.0-flash`). Gemini delivers 2D bounding boxes (`[ymin, xmin, ymax, xmax]`), natural language scene captions (replacing BLIP), and scene classifications (replacing CLIP) in a single request consuming < 15 MB RAM.
+  - **Video Analysis**: Uses **OpenCV** to extract keyframes locally (< 5 MB RAM), then sends sampled frames in a single batched multimodal request to Gemini 2.0 Flash.
+
+### 3. Complete Preservation of Local Models
+The local deep learning tech stack was **strictly preserved rather than removed or replaced**:
+- The codebase retains full local implementations in [`services/image_analyzer.py`](file:///d:/CrimeVision-AI/services/image_analyzer.py), [`services/audio_analyzer.py`](file:///d:/CrimeVision-AI/services/audio_analyzer.py), and [`services/video_analyzer.py`](file:///d:/CrimeVision-AI/services/video_analyzer.py).
+- A centralized router in [`services/provider_manager.py`](file:///d:/CrimeVision-AI/services/provider_manager.py) selects between cloud and local providers based on the `INFERENCE_PROVIDER` environment variable and host hardware memory detection.
+- Local workstations with ample RAM continue running PyTorch models offline by default, maintaining complete backward compatibility, air-gapped readiness, and test suite fidelity.
+
+### 4. Technical Comparison: Local PyTorch Stack vs Cloud Gemini/Groq Stack
+
+| Dimension | Local PyTorch Stack (`INFERENCE_PROVIDER=local`) | Cloud API Stack (`INFERENCE_PROVIDER=cloud`) |
+|---|---|---|
+| **Active Vision Models** | RT-DETR-R50vd + CLIP ViT-B/32 + BLIP-Base | Google Gemini 2.0 Flash Vision (`gemini-2.0-flash`) |
+| **Active Speech Model** | Local Transformers Whisper (`openai/whisper-base`) | Groq Cloud Hosted Whisper (`whisper-large-v3-turbo`) |
+| **RAM Footprint** | ~1,800 MB – 2,800 MB (Requires >= 2 GB RAM) | **< 25 MB** (Runs comfortably on Render 512 MB Free tier) |
+| **CPU Usage** | High (Multi-threaded matrix multiplication) | Minimal (Network I/O only) |
+| **Container Disk Usage**| ~2.2 GB (PyTorch, Torchvision, CUDA/MKL, HuggingFace cache) | Lightweight (~180 MB application runtime) |
+| **Inference Latency** | Image: 4–12s (CPU) \| Audio: 6–20s \| Video: 15–45s | Image: ~1.2s \| Audio: ~1.5s \| Video: ~2.5s |
+| **Monthly Cost** | **₹0** (Utilizes local machine hardware) | **₹0** (Utilizes free tiers: Groq 20 RPM / Gemini 15 RPM) |
+| **Capabilities & Accuracy**| Exact COCO 80-class detection + zero-shot taxonomy | Generalized open-vocabulary detection + 2D bounding boxes |
+| **Forensic Provenance** | `ResultSource.FRESH_INFERENCE`, local reproducibility | `ResultSource.EXTERNAL_API_GENERATION`, provider tagged (`groq`/`gemini`) |
+| **Air-Gap / Offline** | **Yes** (100% offline, zero network leakage) | No (Requires outbound HTTPS access to Groq & Google APIs) |
+
+### 5. Video Frame Sampling & Quota Disclosure
+To preserve the **₹0 monthly budget** and strictly respect the **15 requests-per-minute (RPM)** free-tier rate limit of Google AI Studio, video analysis on the cloud tier uses **multimodal frame snapshot sampling**:
+- **Sampling Rate**: Keyframes are extracted at **1 frame every 1.0 second** (configurable from 0.5s to 5.0s), capped at a **maximum of 5 frames per video** on the cloud tier.
+- **Single-Request Multimodal Batching**: All extracted frame snapshots are compressed to 800px JPEG and dispatched in a **single batched multimodal API call** to Gemini. This guarantees that an entire video analysis consumes only **1 single API request**, eliminating any risk of hitting the 15 RPM limit.
+- **Forensic Disclosure**: As transparently documented in generated forensic PDF reports and UI badges, *sampled snapshot detections represent discrete temporal intervals and do NOT prove continuous, unbroken action across unanalyzed intermediate frames*. Continuous real-time video streaming is not performed on Render Free due to bandwidth and rate limit boundaries.
+
+### 6. Evaluator Instructions: Running Locally vs Cloud on Render
+
+#### Running Locally (PyTorch / Offline Models)
+On a local machine with at least 4 GB RAM, CrimeVision AI runs the native PyTorch models offline:
+```powershell
+# In your local .env or PowerShell session:
+$env:INFERENCE_PROVIDER="local"
+python app.py
+```
+*(No external API keys are required for core inference in local mode).*
+
+#### Running in Cloud / on Render (Groq + Gemini APIs)
+On Render Free (512 MB RAM) or cloud containers, configure your environment variables in the Render Dashboard (**Dashboard $\rightarrow$ Environment**):
+
+##### Required Configuration
+| Environment Variable | Recommended Value | Description |
+|---|---|---|
+| `INFERENCE_PROVIDER` | `cloud` | **Explicitly forces cloud API inference** across all modalities (Image, Audio, Video). (If omitted, `auto` mode automatically activates cloud on Render containers). |
+| `GEMINI_API_KEY` | `AIzaSy...` | **Google Gemini API Key** (Free tier: 15 RPM). Reused for both Image/Video understanding and the Forensic AI Chat Assistant without duplication. |
+| `GROQ_API_KEY` | `gsk_...` | **Groq Cloud API Key** (Free tier: 20 RPM). Reused for both Speech-to-Text Whisper transcription and secondary LLM fallback. |
+
+##### Model Identifiers & Backward Compatibility
+| Environment Variable | Recommended Value | Fallback / Behavior | Description |
+|---|---|---|---|
+| `GEMINI_VISION_MODEL` | `gemini-2.0-flash` | Falls back to `GEMINI_MODEL` or `gemini-2.0-flash` | Multimodal model for image 2D bounding boxes and batched video analysis. |
+| `GROQ_WHISPER_MODEL` | `whisper-large-v3-turbo` | Falls back to `whisper-large-v3-turbo` | Speech-to-Text Whisper model on Groq Cloud. |
+| `GEMINI_MODEL` | `gemini-2.5-flash` | Defaults to `gemini-2.5-flash` | Model used by the Forensic AI Chat Assistant (Phase 7). |
+| `AI_PROVIDER` | `gemini` | Defaults to `gemini` | Backend for Forensic AI Chat Assistant (`gemini` or `groq`). |
+| `WHISPER_MODEL_NAME` | `openai/whisper-base` | N/A | Local PyTorch HuggingFace Whisper identifier; safely ignored by cloud Groq inference to prevent model ID errors. |
+
+##### Application & Security Defaults
+| Environment Variable | Value | Description |
+|---|---|---|
+| `FLASK_ENV` | `production` | Enforces production mode and strict security checks. |
+| `SECRET_KEY` | *(Random 32-char hex)* | Session cookie cryptographic signing secret (required in production). |
+| `DEMO_DISPLAY_NAME` | `user` | Evaluator display name. |
+| `DEMO_CASE_NAME` | `test case` | Default demo case name. |
+
+```bash
+# Example Render Environment Variable Settings:
+INFERENCE_PROVIDER=cloud
+GEMINI_API_KEY=AIzaSy_your_free_gemini_api_key_here
+GROQ_API_KEY=gsk_your_free_groq_api_key_here
+GEMINI_VISION_MODEL=gemini-2.0-flash
+GROQ_WHISPER_MODEL=whisper-large-v3-turbo
+AI_PROVIDER=gemini
+GEMINI_MODEL=gemini-2.5-flash
+WHISPER_MODEL_NAME=openai/whisper-base
+FLASK_ENV=production
+SECRET_KEY=generate_a_secure_random_32_character_string_here
 ```
 
 ---

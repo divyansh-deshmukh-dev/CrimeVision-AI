@@ -275,6 +275,49 @@ class AudioAnalyzer:
                 "segments": [],
             }
 
+        # Route to Cloud Audio Provider (Groq Whisper) when selected or in cloud mode
+        from services.provider_manager import get_inference_provider
+        active_provider = kwargs.get("provider") or get_inference_provider("audio")
+        if active_provider == "cloud":
+            from services.cloud_audio_service import transcribe_audio_with_groq
+            return transcribe_audio_with_groq(
+                audio_path=audio_path,
+                forced_language=forced_language,
+                **kwargs,
+            )
+
+        # Pre-flight host resource check: prevent uncatchable container SIGKILL OOM
+        from services.hardware_utils import is_inference_memory_sufficient
+        mem_ok, actual_mb, mem_msg = is_inference_memory_sufficient(min_mb=800, model_name="OpenAI Whisper")
+        if not mem_ok:
+            submodel_statuses = {"whisper": "failed"}
+            provenance = build_provenance_record(
+                modality="audio",
+                result_source=ResultSource.FRESH_INFERENCE,
+                execution_status="failed",
+                evidence_id=kwargs.get("evidence_id"),
+                case_id=kwargs.get("case_id"),
+                input_sha256=kwargs.get("input_sha256"),
+                run_id=kwargs.get("run_id"),
+                requested_at=kwargs.get("requested_at"),
+                submodel_statuses=submodel_statuses,
+                diagnostic_details={"hardware_constraint": mem_msg},
+            )
+            return {
+                "status": "failed",
+                "is_seeded_sample": False,
+                "result_source": ResultSource.FRESH_INFERENCE.value,
+                "error": mem_msg,
+                "error_category": "HOST_MEMORY_LIMITATION",
+                "audio_metadata": {"filename": audio_path.name},
+                "transcript": "",
+                "text": "",
+                "segments": [],
+                "intelligence_report": {},
+                "submodel_statuses": submodel_statuses,
+                "provenance": provenance,
+            }
+
         load_res = self.load_audio_waveform(audio_path)
         if load_res.get("status") != "success":
             return {

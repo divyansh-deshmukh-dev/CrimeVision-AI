@@ -483,14 +483,73 @@ class ImageAnalyzer:
                 img_w, img_h, infer_w, infer_h, self.max_inference_dimension,
             )
 
+        # Route to Cloud Vision Provider (Google Gemini Vision) when selected or in cloud mode
+        from services.provider_manager import get_inference_provider
+        active_provider = kwargs.get("provider") or get_inference_provider("image")
+        if active_provider == "cloud":
+            from services.cloud_vision_service import analyze_image_with_gemini
+            return analyze_image_with_gemini(
+                image_path=image_path,
+                candidate_labels=labels,
+                **kwargs,
+            )
+
+        # Pre-flight host resource check: prevent uncatchable container SIGKILL OOM
+        from services.hardware_utils import is_inference_memory_sufficient
+        mem_ok, actual_mb, mem_msg = is_inference_memory_sufficient(min_mb=1500, model_name="RT-DETR / CLIP / BLIP")
+        if not mem_ok:
+            metadata = {
+                "filename": image_path.name,
+                "width": img_w,
+                "height": img_h,
+                "inference_width": infer_w,
+                "inference_height": infer_h,
+                "resized_for_inference": resized_for_inference,
+                "max_inference_dimension": self.max_inference_dimension,
+            }
+            submodel_statuses = {"rtdetr": "failed", "clip": "unavailable", "blip": "unavailable"}
+            provenance = build_provenance_record(
+                modality="image",
+                result_source=ResultSource.FRESH_INFERENCE,
+                execution_status="failed",
+                evidence_id=kwargs.get("evidence_id"),
+                case_id=kwargs.get("case_id"),
+                input_sha256=kwargs.get("input_sha256"),
+                run_id=kwargs.get("run_id"),
+                requested_at=kwargs.get("requested_at"),
+                submodel_statuses=submodel_statuses,
+                diagnostic_details={"hardware_constraint": mem_msg},
+            )
+            return {
+                "status": "failed",
+                "is_seeded_sample": False,
+                "result_source": ResultSource.FRESH_INFERENCE.value,
+                "error": mem_msg,
+                "error_code": "HOST_MEMORY_LIMITATION",
+                "image_metadata": metadata,
+                "detection": {
+                    "status": "failed",
+                    "error": mem_msg,
+                    "objects": [],
+                },
+                "clip": {"status": "unavailable", "matches": []},
+                "caption": {"status": "unavailable", "caption": None},
+                "submodel_statuses": submodel_statuses,
+                "provenance": provenance,
+                "summary": "Analysis halted safely: Host lacks sufficient RAM to execute heavy neural vision models.",
+            }
+
         # 1. RT-DETR Object Detection (pass infer_image and original_size=(img_w, img_h))
         rtdetr_result = self.run_rtdetr_detection(infer_image, original_size=(img_w, img_h))
+        gc.collect()
 
         # 2. CLIP Similarity Scoring
         clip_result = self.run_clip_similarity(infer_image, labels)
+        gc.collect()
 
         # 3. BLIP Image Captioning
         blip_result = self.run_blip_captioning(infer_image)
+        gc.collect()
 
         total_duration_ms = (time.perf_counter() - t_pipeline_start) * 1000
 

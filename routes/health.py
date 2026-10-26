@@ -67,6 +67,21 @@ def health_check():
         checks["torch"] = "not_installed"
         checks["ai_engine"] = f"unavailable: {exc}"
 
+    # ── Host Memory & Inference Resource Assessment ───────────────────────────
+    from services.hardware_utils import get_system_memory_mb
+    host_mem_mb = get_system_memory_mb()
+    checks["host_memory_mb"] = host_mem_mb if host_mem_mb is not None else "unknown"
+
+    min_inference_mem = int(current_app.config.get("MIN_INFERENCE_MEMORY_MB", 1500))
+    if host_mem_mb is not None and host_mem_mb < min_inference_mem:
+        checks["live_inference_status"] = "resource_constrained"
+        checks["live_inference_notice"] = (
+            f"Host memory ({host_mem_mb} MB) is below {min_inference_mem} MB. "
+            "Live neural inference requires local workstation or upgraded cloud instance (>= 2GB-4GB RAM)."
+        )
+    else:
+        checks["live_inference_status"] = "ready"
+
     return (
         jsonify(
             {

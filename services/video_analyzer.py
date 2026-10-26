@@ -346,6 +346,80 @@ class VideoAnalyzer:
         video_path = Path(video_path)
         interval, frame_limit = self.validate_sampling_params(sample_interval_seconds, max_frames)
 
+        # Route to Cloud Video Provider (OpenCV Frame Extraction + Gemini Vision) when selected or in cloud mode
+        from services.provider_manager import get_inference_provider
+        active_provider = kwargs.get("provider") or get_inference_provider("video")
+
+        if active_provider == "cloud":
+            # 1. Extract metadata via lightweight OpenCV
+            try:
+                metadata = self.extract_video_metadata(video_path)
+            except Exception as exc:
+                logger.warning("Failed extracting video metadata for %s: %s", video_path, exc)
+                return {
+                    "status": "failed",
+                    "error": f"Video metadata extraction failed: {exc}",
+                    "video_metadata": {},
+                    "sampled_frames": [],
+                    "aggregated_detections": {"total_detections": 0, "unique_classes": [], "class_counts": {}},
+                }
+
+            # 2. Sample frames via lightweight OpenCV (cap at 5 frames for single-call quota preservation)
+            cloud_frame_limit = min(frame_limit, 5)
+            try:
+                raw_frames = self.sample_frames(video_path, sample_interval_seconds=interval, max_frames=cloud_frame_limit)
+            except Exception as exc:
+                logger.warning("Frame sampling failed for %s: %s", video_path, exc)
+                return {
+                    "status": "failed",
+                    "error": f"Frame extraction failed: {exc}",
+                    "video_metadata": metadata,
+                    "sampled_frames": [],
+                    "aggregated_detections": {"total_detections": 0, "unique_classes": [], "class_counts": {}},
+                }
+
+            from services.cloud_vision_service import analyze_video_frames_with_gemini
+            return analyze_video_frames_with_gemini(
+                sampled_frames=raw_frames,
+                video_metadata=metadata,
+                sample_interval_seconds=interval,
+                max_frames=cloud_frame_limit,
+                **kwargs,
+            )
+
+        # Pre-flight host resource check: prevent uncatchable container SIGKILL OOM
+        from services.hardware_utils import is_inference_memory_sufficient
+        mem_ok, actual_mb, mem_msg = is_inference_memory_sufficient(min_mb=1200, model_name="Video Temporal RT-DETR")
+        if not mem_ok:
+            return {
+                "status": "failed",
+                "is_seeded_sample": False,
+                "result_source": ResultSource.IN_MEMORY_MODEL_REUSE.value,
+                "error": mem_msg,
+                "error_code": "HOST_MEMORY_LIMITATION",
+                "video_metadata": {"filename": video_path.name},
+                "sampled_frames": [],
+                "aggregated_detections": {
+                    "total_detections": 0,
+                    "unique_classes": [],
+                    "class_counts": {},
+                },
+                "submodel_statuses": {"metadata": "skipped", "rtdetr": "failed"},
+                "provenance": build_provenance_record(
+                    modality="video",
+                    result_source=ResultSource.IN_MEMORY_MODEL_REUSE,
+                    execution_status="failed",
+                    evidence_id=kwargs.get("evidence_id"),
+                    case_id=kwargs.get("case_id"),
+                    input_sha256=kwargs.get("input_sha256"),
+                    run_id=kwargs.get("run_id"),
+                    requested_at=kwargs.get("requested_at"),
+                    duration_ms=(time.perf_counter() - t_pipeline_start) * 1000,
+                    submodel_statuses={"metadata": "skipped", "rtdetr": "failed"},
+                    diagnostic_details={"hardware_constraint": mem_msg},
+                ),
+            }
+
         # 1. Video metadata extraction
         try:
             metadata = self.extract_video_metadata(video_path)
