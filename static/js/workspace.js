@@ -899,7 +899,8 @@ function selectEvidence(evidenceId, jumpToModality = false) {
     el.classList.toggle("active", Boolean(isCurrent));
   });
 
-  const fileUrl = API.evidenceFile(state.activeCaseId, evidenceId);
+  const cacheBust = item.sha256 ? item.sha256.substring(0, 12) : Date.now();
+  const fileUrl = `${API.evidenceFile(state.activeCaseId, evidenceId)}?v=${cacheBust}`;
   const displayName = getEvidenceDisplayName(item);
 
   if (item.modality === "image") {

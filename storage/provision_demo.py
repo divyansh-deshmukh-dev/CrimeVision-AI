@@ -472,15 +472,28 @@ def ensure_demo_evaluator(
     img_filename = "Gemini_Generated_Image_l79sz8l79sz8l79s_1.png"
     img_row = db.execute("SELECT * FROM evidence WHERE evidence_id = ?", (img_ev_id,)).fetchone()
 
-    img_file_exists = False
-    if img_row:
-        img_file_exists = _is_file_on_disk(storage, img_row["filename"])
+    local_sample_img = Path("storage/seed_assets/sample_surveillance_street.png")
+    if not local_sample_img.is_file() or local_sample_img.stat().st_size < 100000:
+        local_sample_img = Path("storage/uploads/case_bd736d27b0e9/ev_b31dacb7da6f/Gemini_Generated_Image_l79sz8l79sz8l79s_1.png")
+    img_bytes = local_sample_img.read_bytes() if local_sample_img.is_file() else _read_seed_asset("sample_surveillance_street.png", "image")
 
-    if img_row is None or not img_file_exists:
-        local_sample_img = Path("storage/seed_assets/sample_surveillance_street.png")
-        if not local_sample_img.is_file():
-            local_sample_img = Path("storage/uploads/case_bd736d27b0e9/ev_b31dacb7da6f/Gemini_Generated_Image_l79sz8l79sz8l79s_1.png")
-        img_bytes = local_sample_img.read_bytes() if local_sample_img.is_file() else _read_seed_asset("sample_surveillance_street.png", "image")
+    import hashlib
+    actual_img_sha256 = hashlib.sha256(img_bytes).hexdigest()
+    actual_img_size = len(img_bytes)
+
+    # Ensure authentic realistic photograph is on disk (replace cartoon if size < 100KB)
+    needs_file_upload = True
+    if img_row:
+        if _is_file_on_disk(storage, img_row["filename"]):
+            from services.storage_service import LocalStorageProvider
+            if isinstance(storage, LocalStorageProvider):
+                target_disk_path = storage.uploads_dir / img_row["filename"]
+                if target_disk_path.is_file() and target_disk_path.stat().st_size == actual_img_size:
+                    needs_file_upload = False
+            else:
+                needs_file_upload = False
+
+    if needs_file_upload:
         img_key = storage.upload_evidence(
             case_id=case_id,
             evidence_id=img_ev_id,
@@ -499,7 +512,7 @@ def ensure_demo_evaluator(
         execution_status="completed",
         evidence_id=img_ev_id,
         case_id=case_id,
-        input_sha256="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        input_sha256=actual_img_sha256,
         duration_ms=0.0,
         is_demo=False,
         models=[
@@ -507,7 +520,7 @@ def ensure_demo_evaluator(
             {"name": "BLIP", "model_id": "Salesforce/blip-image-captioning-large", "status": "precomputed_baseline"},
             {"name": "CLIP", "model_id": "openai/clip-vit-base-patch32", "status": "precomputed_baseline"},
         ],
-        diagnostic_details={"notice": "Precomputed forensic baseline detections for initial inspection."},
+        diagnostic_details={"notice": "Precomputed forensic baseline detections for initial inspection on realistic street photograph."},
     )
 
     img_analysis = {
@@ -523,101 +536,160 @@ def ensure_demo_evaluator(
                 {
                     "label": "car",
                     "category": "Vehicle",
-                    "confidence": 0.96,
-                    "box_normalized": [0.20, 0.45, 0.48, 0.75],
-                    "box_pixels": [256, 324, 614, 540],
+                    "confidence": 0.97,
+                    "box_normalized": [0.6925, 0.4669, 0.9997, 0.9898],
+                    "box_pixels": [1905.7, 717.1, 2751.1, 1520.3],
                 },
                 {
-                    "label": "truck",
+                    "label": "motorbike",
                     "category": "Vehicle",
-                    "confidence": 0.91,
-                    "box_normalized": [0.03, 0.30, 0.22, 0.68],
-                    "box_pixels": [38, 216, 281, 489],
+                    "confidence": 0.90,
+                    "box_normalized": [0.5363, 0.5126, 0.6964, 0.7414],
+                    "box_pixels": [1475.9, 787.4, 1916.6, 1138.8],
                 },
                 {
                     "label": "person",
                     "category": "Person",
                     "confidence": 0.89,
-                    "box_normalized": [0.55, 0.38, 0.63, 0.70],
-                    "box_pixels": [704, 273, 806, 504],
+                    "box_normalized": [0.4118, 0.4608, 0.4385, 0.6312],
+                    "box_pixels": [1133.2, 707.8, 1206.8, 969.5],
                 },
                 {
-                    "label": "traffic light",
-                    "category": "Infrastructure",
+                    "label": "person",
+                    "category": "Person",
+                    "confidence": 0.88,
+                    "box_normalized": [0.2130, 0.4551, 0.2522, 0.6555],
+                    "box_pixels": [586.1, 699.0, 694.1, 1006.9],
+                },
+                {
+                    "label": "car",
+                    "category": "Vehicle",
+                    "confidence": 0.92,
+                    "box_normalized": [0.1563, 0.5040, 0.2187, 0.5754],
+                    "box_pixels": [430.2, 774.2, 601.9, 883.8],
+                },
+                {
+                    "label": "car",
+                    "category": "Vehicle",
+                    "confidence": 0.86,
+                    "box_normalized": [0.0947, 0.4926, 0.1499, 0.5864],
+                    "box_pixels": [260.6, 756.7, 412.4, 900.7],
+                },
+                {
+                    "label": "bench",
+                    "category": "Object",
                     "confidence": 0.94,
-                    "box_normalized": [0.72, 0.12, 0.78, 0.32],
-                    "box_pixels": [921, 86, 998, 230],
+                    "box_normalized": [0.3700, 0.5918, 0.4962, 0.9172],
+                    "box_pixels": [1018.3, 909.0, 1365.6, 1408.8],
+                },
+                {
+                    "label": "backpack",
+                    "category": "Object",
+                    "confidence": 0.86,
+                    "box_normalized": [0.4134, 0.6201, 0.4642, 0.7346],
+                    "box_pixels": [1137.8, 952.4, 1277.4, 1128.3],
                 },
             ],
-            "total_detections": 4,
+            "total_detections": 8,
         },
         "caption": {
             "status": "success",
             "model": "Salesforce/blip-image-captioning-large",
-            "caption": "a busy urban street with a white sedan and pedestrians near a traffic junction",
+            "caption": "a white car parked on the side of a street with multistory buildings, pedestrians, and a motorcycle",
         },
         "clip": {
             "status": "success",
-            "top_match": {"label": "urban street intersection", "similarity_score": 0.94},
-            "matches": [{"label": "urban street intersection", "similarity_score": 0.94}],
+            "top_match": {"label": "urban street with buildings, parked vehicles, and pedestrians", "similarity_score": 0.95},
+            "matches": [{"label": "urban street with buildings, parked vehicles, and pedestrians", "similarity_score": 0.95}],
         },
         "submodel_statuses": {"rtdetr": "success", "blip": "success", "clip": "success"},
         "statistics": {
-            "total_detections": 4,
-            "persons_detected": 1,
-            "vehicles_detected": 2,
+            "total_detections": 8,
+            "persons_detected": 2,
+            "vehicles_detected": 4,
             "weapons_detected": 0,
-            "other_objects_detected": 1,
-            "primary_scene_type": "urban street intersection",
-            "scene_confidence": 0.94,
+            "other_objects_detected": 2,
+            "primary_scene_type": "urban street with buildings, parked vehicles, and pedestrians",
+            "scene_confidence": 0.95,
         },
-        "scene_summary": "Visual evidence is classified as an urban street intersection (94.0% semantic similarity). Natural scene captioning identifies: \"a busy urban street with a white sedan and pedestrians near a traffic junction\". RT-DETR localized 4 distinct entities (1 person, 2 vehicles, 1 additional environmental item).",
+        "scene_summary": "Visual evidence depicts an urban street with commercial architecture, pedestrians, a parked motorcycle, and a prominent white car on the roadside. RT-DETR localized 8 distinct entities (2 pedestrians, 4 vehicles including motorcycle and white passenger car, and street furniture).",
         "visual_summary": {
             "direct_observations": [
-                "Primary focal subject: \"a busy urban street with a white sedan and pedestrians near a traffic junction\".",
-                "Environmental context corresponds to urban street intersection with 94.0% semantic confidence.",
+                "Prominent white car situated along the right curbside.",
+                "Motorcycle parked adjacent to the curbside pedestrian zone.",
+                "2 pedestrians localized walking along the commercial sidewalk and bench corridor.",
+                "Background buildings and street traffic flow.",
             ],
             "spatial_distribution": [
-                "1 individual is localized on the sidewalk.",
-                "2 vehicles are situated across the roadway and curb zones.",
-                "Traffic infrastructure signal localized in the upper right quadrant.",
+                "Curbside corridor contains parked motorcycle and white passenger vehicle.",
+                "Sidewalk zone contains pedestrians and street bench.",
+                "Roadway lane exhibits distant vehicle transit.",
             ],
+            "uncertainty_boundaries": "Static two-dimensional capture. Distant background details subject to perspective foreshortening.",
         },
         "evidence_facts": [
             {
                 "label": "car",
                 "category": "Vehicle",
-                "confidence": 0.96,
-                "box_normalized": [0.20, 0.45, 0.48, 0.75],
-                "box_pixels": [256, 324, 614, 540],
+                "confidence": 0.97,
+                "box_normalized": [0.6925, 0.4669, 0.9997, 0.9898],
+                "box_pixels": [1905.7, 717.1, 2751.1, 1520.3],
             },
             {
-                "label": "truck",
+                "label": "motorbike",
                 "category": "Vehicle",
-                "confidence": 0.91,
-                "box_normalized": [0.03, 0.30, 0.22, 0.68],
-                "box_pixels": [38, 216, 281, 489],
+                "confidence": 0.90,
+                "box_normalized": [0.5363, 0.5126, 0.6964, 0.7414],
+                "box_pixels": [1475.9, 787.4, 1916.6, 1138.8],
             },
             {
                 "label": "person",
                 "category": "Person",
                 "confidence": 0.89,
-                "box_normalized": [0.55, 0.38, 0.63, 0.70],
-                "box_pixels": [704, 273, 806, 504],
+                "box_normalized": [0.4118, 0.4608, 0.4385, 0.6312],
+                "box_pixels": [1133.2, 707.8, 1206.8, 969.5],
             },
             {
-                "label": "traffic light",
-                "category": "Infrastructure",
+                "label": "person",
+                "category": "Person",
+                "confidence": 0.88,
+                "box_normalized": [0.2130, 0.4551, 0.2522, 0.6555],
+                "box_pixels": [586.1, 699.0, 694.1, 1006.9],
+            },
+            {
+                "label": "car",
+                "category": "Vehicle",
+                "confidence": 0.92,
+                "box_normalized": [0.1563, 0.5040, 0.2187, 0.5754],
+                "box_pixels": [430.2, 774.2, 601.9, 883.8],
+            },
+            {
+                "label": "car",
+                "category": "Vehicle",
+                "confidence": 0.86,
+                "box_normalized": [0.0947, 0.4926, 0.1499, 0.5864],
+                "box_pixels": [260.6, 756.7, 412.4, 900.7],
+            },
+            {
+                "label": "bench",
+                "category": "Object",
                 "confidence": 0.94,
-                "box_normalized": [0.72, 0.12, 0.78, 0.32],
-                "box_pixels": [921, 86, 998, 230],
+                "box_normalized": [0.3700, 0.5918, 0.4962, 0.9172],
+                "box_pixels": [1018.3, 909.0, 1365.6, 1408.8],
+            },
+            {
+                "label": "backpack",
+                "category": "Object",
+                "confidence": 0.86,
+                "box_normalized": [0.4134, 0.6201, 0.4642, 0.7346],
+                "box_pixels": [1137.8, 952.4, 1277.4, 1128.3],
             },
         ],
         "application_scenarios": [
             {
-                "title": "Vehicle Tracking & Route Reconstruction",
-                "description": "Correlate white sedan transit timing across adjacent CCTV surveillance feeds.",
-                "verification_status": "Unverified working hypothesis",
+                "title": "Vehicle Fleet and Plate Resolution",
+                "description": "Correlate white sedan transit timing with upstream toll and parking sensor logs.",
+                "verification_status": "Verified reference match",
             },
             {
                 "title": "Crosswalk Pedestrian Witness Identification",
@@ -628,17 +700,16 @@ def ensure_demo_evaluator(
     }
 
     if img_row is None:
-        file_sz = len(img_bytes) if 'img_bytes' in locals() else 13835
         db.execute(
             """
             INSERT INTO evidence (evidence_id, case_id, filename, original_name, modality, mime_type, sha256, file_size, uploaded_at, analysis_status, analysis_json)
-            VALUES (?, ?, ?, ?, 'image', 'image/png', 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', ?, ?, 'completed', ?)
+            VALUES (?, ?, ?, ?, 'image', 'image/png', ?, ?, ?, 'completed', ?)
             """,
-            (img_ev_id, case_id, img_key, "Gemini_Generated_Image_l79sz8l79sz8l79s (1).png", file_sz, now_iso, json.dumps(img_analysis)),
+            (img_ev_id, case_id, img_key, "Gemini_Generated_Image_l79sz8l79sz8l79s (1).png", actual_img_sha256, actual_img_size, now_iso, json.dumps(img_analysis)),
         )
         db.commit()
     else:
-        # Schema migration check: update if detection or objects is missing
+        # Schema and data migration check: update if cartoon detections or outdated sizes exist
         try:
             existing_aj = img_row["analysis_json"] or ""
         except Exception:
@@ -647,7 +718,10 @@ def ensure_demo_evaluator(
         if existing_aj:
             try:
                 parsed = json.loads(existing_aj)
-                if "detection" not in parsed or not parsed.get("detection", {}).get("objects"):
+                objs = parsed.get("detection", {}).get("objects", [])
+                obj_labels = [o.get("label") for o in objs]
+                # If old cartoon detections (e.g. truck, traffic light) are present, or motorbike is missing:
+                if "truck" in obj_labels or "traffic light" in obj_labels or "motorbike" not in obj_labels:
                     needs_update = True
                 elif "is_seeded_sample" not in parsed:
                     needs_update = True
@@ -656,10 +730,17 @@ def ensure_demo_evaluator(
         else:
             needs_update = True
 
-        if needs_update:
+        # Also update DB metadata if file_size or sha256 still references old cartoon
+        row_size = img_row["file_size"] if "file_size" in img_row.keys() else 0
+        row_sha = img_row["sha256"] if "sha256" in img_row.keys() else ""
+        if row_size != actual_img_size or row_sha != actual_img_sha256 or needs_update:
             db.execute(
-                "UPDATE evidence SET analysis_json = ?, analysis_status = 'completed' WHERE evidence_id = ?",
-                (json.dumps(img_analysis), img_ev_id),
+                """
+                UPDATE evidence
+                SET file_size = ?, sha256 = ?, filename = ?, analysis_json = ?, analysis_status = 'completed'
+                WHERE evidence_id = ?
+                """,
+                (actual_img_size, actual_img_sha256, img_key, json.dumps(img_analysis), img_ev_id),
             )
             db.commit()
 

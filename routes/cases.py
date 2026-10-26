@@ -338,12 +338,14 @@ def get_evidence_file_endpoint(case_id: str, evidence_id: str):
         if not target_file.is_file():
             return _error("Evidence file missing from disk repository.", 404)
 
-        return send_file(
+        resp = send_file(
             str(target_file),
             mimetype=ev.get("mime_type", "application/octet-stream"),
             as_attachment=False,
             download_name=ev.get("original_name", target_file.name),
         )
+        resp.headers["Cache-Control"] = "no-cache, must-revalidate, max-age=0"
+        return resp
 
     # Cloud storage streaming without full memory loading
     try:
@@ -460,10 +462,11 @@ def analyze_image_endpoint(case_id: str, evidence_id: str):
             error_msg = error_msg[:300] + "..."
         error_payload = {
             "status": "failed",
+            "is_seeded_sample": False,
             "error": error_msg,
             "detections": [],
             "caption": "",
-            "summary": "Analysis failed due to an internal error.",
+            "summary": "Analysis failed due to runtime execution error.",
             "submodel_statuses": {"rtdetr": "failed", "clip": "failed", "blip": "failed"},
             "provenance": build_provenance_record(
                 modality="image",
@@ -484,14 +487,47 @@ def analyze_image_endpoint(case_id: str, evidence_id: str):
             "case_id": case_id,
             "analysis": error_payload,
             "error": error_msg,
-        }), 500
+        }), 200
 
-    return jsonify({
+    res_payload = {
         "status": updated.get("analysis_status", final_status) if updated else final_status,
         "evidence_id": evidence_id,
         "case_id": case_id,
         "analysis": updated.get("analysis_json") if updated else analysis_result,
-    }), 200
+    }
+    if final_status == "failed":
+        res_payload["error"] = analysis_result.get("error", "Image analysis failed.")
+
+    return jsonify(res_payload), 200
+
+
+@cases_bp.route(
+    "/api/cases/<string:case_id>/evidence/<string:evidence_id>/restore_seeded_sample",
+    methods=["POST"],
+)
+@login_required
+def restore_seeded_sample_endpoint(case_id: str, evidence_id: str):
+    """Restore verified seeded forensic baseline sample data for a demo evidence item."""
+    case, err = verify_case_access(case_id, write=True)
+    if err:
+        return err
+
+    ev = get_evidence(evidence_id)
+    if ev is None or ev["case_id"] != case_id:
+        return _error(f"Evidence '{evidence_id}' not found.", 404)
+
+    if evidence_id == "ev_b31dacb7da6f":
+        from storage.provision_demo import ensure_demo_evaluator
+        ensure_demo_evaluator()
+        updated_ev = get_evidence(evidence_id)
+        return jsonify({
+            "status": "success",
+            "message": "Restored precomputed baseline sample detections.",
+            "evidence": updated_ev,
+            "analysis": updated_ev.get("analysis_json"),
+        }), 200
+
+    return _error("Evidence item does not have a seeded baseline sample.", 400)
 
 
 @cases_bp.route(

@@ -713,14 +713,15 @@ class TestFreshDeploymentStartupProvisioning:
             assert "detection" in analysis
             assert "objects" in analysis["detection"]
             objects = analysis["detection"]["objects"]
-            assert len(objects) == 4
+            assert len(objects) == 8
 
             # Verify bounding box format is normalized [x1, y1, x2, y2]
             labels = [obj["label"] for obj in objects]
             assert "car" in labels
-            assert "truck" in labels
+            assert "motorbike" in labels
             assert "person" in labels
-            assert "traffic light" in labels
+            assert "truck" not in labels
+            assert "traffic light" not in labels
 
             for obj in objects:
                 assert "box_normalized" in obj
@@ -754,7 +755,7 @@ class TestFreshDeploymentStartupProvisioning:
             migrated = json.loads(row3["analysis_json"])
             assert "detection" in migrated
             assert "objects" in migrated["detection"]
-            assert len(migrated["detection"]["objects"]) == 4
+            assert len(migrated["detection"]["objects"]) == 8
 
     def test_real_user_uploaded_files_never_overwritten(self, tmp_path):
         """Verify user-uploaded evidence files and records are never overwritten or touched by provisioning."""
@@ -965,7 +966,11 @@ class TestEngineHealthAndInferenceResilience:
         if isinstance(restored_analysis, str):
             restored_analysis = json.loads(restored_analysis)
         assert restored_analysis["is_seeded_sample"] is True
-        assert len(restored_analysis["detection"]["objects"]) == 4
+        assert len(restored_analysis["detection"]["objects"]) == 8
+        restored_labels = [o["label"] for o in restored_analysis["detection"]["objects"]]
+        assert "motorbike" in restored_labels
+        assert "car" in restored_labels
+        assert "truck" not in restored_labels
 
     def test_image_analysis_error_handling_when_model_fails(self, tmp_path, monkeypatch):
         """Verify analyze_image_endpoint returns actionable error JSON when inference fails, without crashing."""
@@ -1021,6 +1026,124 @@ class TestEngineHealthAndInferenceResilience:
         assert data["status"] == "failed"
         assert "512MB RAM constraint" in data["error"]
         assert data["analysis"]["is_seeded_sample"] is False
+
+
+class TestRealisticImagePreviewAndDetections:
+    """Verifies that the authentic realistic street photograph is served and verified."""
+
+    def test_realistic_image_preview_served_and_cache_control_headers(self, tmp_path):
+        """Verify evidence file endpoint serves the authentic realistic photograph (>1MB) with cache-control headers."""
+        isolated = tmp_path / "img_preview_test"
+        cfg = {
+            "TESTING": True,
+            "STORAGE_DIR": isolated,
+            "CASES_DIR": isolated / "cases",
+            "UPLOADS_DIR": isolated / "uploads",
+            "REPORTS_DIR": isolated / "reports",
+            "DB_PATH": isolated / "img.db",
+            "SECRET_KEY": "img-test-secret-key-32-bytes!",
+        }
+        app = create_app(config_override=cfg)
+        client = app.test_client()
+
+        # Login as user-12
+        csrf_tok = client.get("/api/auth/csrf").get_json()["csrf_token"]
+        login_res = client.post(
+            "/api/auth/login",
+            json={"username": "user-12", "password": "user1234"},
+            headers={"X-CSRF-Token": csrf_tok},
+        )
+        assert login_res.status_code == 200
+
+        # Fetch image preview file
+        res = client.get("/api/cases/case_bd736d27b0e9/evidence/ev_b31dacb7da6f/file")
+        assert res.status_code == 200
+        assert res.headers.get("Cache-Control") == "no-cache, must-revalidate, max-age=0"
+        assert len(res.data) > 1_000_000, f"Expected realistic photo > 1MB, got {len(res.data)} bytes"
+
+        # Verify sha256 matches authentic photograph
+        import hashlib
+        img_sha = hashlib.sha256(res.data).hexdigest()
+        assert img_sha == "d330e830d9ddb732fc6cb356b955e2884cbab6bf8f883e2939afe5cd77cf2100"
+
+    def test_genuine_photograph_detections_in_seeded_analysis(self, tmp_path):
+        """Verify seeded analysis contains genuine RT-DETR detections for the realistic street photo."""
+        isolated = tmp_path / "detections_test"
+        cfg = {
+            "TESTING": True,
+            "STORAGE_DIR": isolated,
+            "CASES_DIR": isolated / "cases",
+            "UPLOADS_DIR": isolated / "uploads",
+            "REPORTS_DIR": isolated / "reports",
+            "DB_PATH": isolated / "det.db",
+            "SECRET_KEY": "det-test-secret-key-32-bytes!",
+        }
+        app = create_app(config_override=cfg)
+
+        with app.app_context():
+            from storage.database import get_db
+            db = get_db()
+            row = db.execute("SELECT analysis_json FROM evidence WHERE evidence_id = 'ev_b31dacb7da6f'").fetchone()
+            assert row is not None
+            analysis = json.loads(row["analysis_json"])
+
+            objects = analysis["detection"]["objects"]
+            assert len(objects) == 8
+            labels = [o["label"] for o in objects]
+
+            # Genuine photograph objects
+            assert "car" in labels
+            assert "motorbike" in labels
+            assert "person" in labels
+            assert "bench" in labels
+            assert "backpack" in labels
+
+            # Former cartoon placeholder objects must NOT be present
+            assert "truck" not in labels
+            assert "traffic light" not in labels
+
+            # Caption matches real photograph
+            caption = analysis["caption"]["caption"]
+            assert "motorcycle" in caption or "motorbike" in caption
+            assert "white car" in caption
+
+    def test_cartoon_placeholder_on_disk_is_overwritten(self, tmp_path):
+        """Verify that if an outdated small cartoon placeholder (<100KB) exists on disk, provisioning upgrades it."""
+        isolated = tmp_path / "overwrite_test"
+        uploads = isolated / "uploads"
+        ev_dir = uploads / "case_bd736d27b0e9" / "ev_b31dacb7da6f"
+        ev_dir.mkdir(parents=True, exist_ok=True)
+
+        target_file = ev_dir / "Gemini_Generated_Image_l79sz8l79sz8l79s_1.png"
+        target_file.write_bytes(b"STALE_CARTOON_PLACEHOLDER_BYTES" * 100)  # ~3KB dummy
+        assert target_file.stat().st_size < 100000
+
+        cfg = {
+            "TESTING": True,
+            "STORAGE_DIR": isolated,
+            "CASES_DIR": isolated / "cases",
+            "UPLOADS_DIR": uploads,
+            "REPORTS_DIR": isolated / "reports",
+            "DB_PATH": isolated / "upg.db",
+            "SECRET_KEY": "upg-test-secret-key-32-bytes!",
+        }
+        app = create_app(config_override=cfg)
+
+        with app.app_context():
+            # Check disk file was upgraded to authentic photo
+            assert target_file.is_file()
+            assert target_file.stat().st_size > 1_000_000
+
+            import hashlib
+            disk_sha = hashlib.sha256(target_file.read_bytes()).hexdigest()
+            assert disk_sha == "d330e830d9ddb732fc6cb356b955e2884cbab6bf8f883e2939afe5cd77cf2100"
+
+            from storage.database import get_db
+            db = get_db()
+            row = db.execute("SELECT file_size, sha256 FROM evidence WHERE evidence_id = 'ev_b31dacb7da6f'").fetchone()
+            assert row["file_size"] > 1_000_000
+            assert row["sha256"] == "d330e830d9ddb732fc6cb356b955e2884cbab6bf8f883e2939afe5cd77cf2100"
+
 
 
 
